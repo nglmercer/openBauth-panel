@@ -1,0 +1,23 @@
+{
+  "name": "openbauth-panel",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun ./src/index.ts",
+    "dev": "bun --watch ./src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@faker-js/faker": "^10.1.0",
+    "@hono/zod-validator": "^0.7.5",
+    "hono": "^4.10.7",
+    "open-bauth": "^1.3.5",
+    "zod": "^4.1.13"
+  }
+}
