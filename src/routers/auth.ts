@@ -1,14 +1,10 @@
 import { Hono } from 'hono';
-import { z } from 'zod';
+import { z, email } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { db, dbInitializer, jwtService, authService, permissionService } from '../db';
 import { errorString, notResult } from '../utils/errors';
 
 const authRouter = new Hono();
-
-// Helper for email validation if not imported from zod directly
-const email = (message: string) => z.string().email(message);
-
 // Schema register (requiere todo)
 const registerSchema = z.object({
     email: email("Debe ser un email válido"),

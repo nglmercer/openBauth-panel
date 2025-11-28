@@ -8,7 +8,7 @@ import { html } from 'hono/html';
 import { authRouter } from './routers/auth';
 import { authSSR } from './routers/auth_ssr';
 import { dbInitializer, authService } from './db';
-
+import { getSchemas,getDefaultSchemas } from "./database/base-controller";
 const app = new Hono();
 
 app.use("*", logger());
@@ -26,8 +26,10 @@ app.use('*', csrf()); // Protect against CSRF
 
 try {
     await dbInitializer.initialize();
-    const allusers = await authService.getUsers()
-    console.log("allusers", allusers)
+    const schemas = getDefaultSchemas();
+    const userSchema = schemas.find((t)=>t.tableName === 'users');
+    console.log("userSchema",userSchema)
+//    const allusers = await authService.getUsers(); console.log("allusers", allusers);
     console.log('DB inicializada correctamente');
 
     // API Routes
