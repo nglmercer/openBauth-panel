@@ -3,9 +3,9 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
-import { csrf } from "hono/csrf";
 import { getCookie } from "hono/cookie";
 import { html } from "hono/html";
+import { serveStatic } from "hono/bun";
 
 // Imports de tu lógica
 import { authRouter } from "./routers/auth";
@@ -18,10 +18,12 @@ const app = new Hono();
 // Middlewares Globales
 app.use("*", logger());
 app.use("*", prettyJSON());
+
+// Update CORS configuration for SvelteKit frontend
 app.use(
   "*",
   cors({
-    origin: "*",
+    origin: ["http://localhost:5173", "http://localhost:3000"], // Allow both frontend and backend
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -35,6 +37,9 @@ try {
   await dbInitializer.initialize();
   console.log("DB inicializada correctamente");
 
+  // Serve static files from frontend build directory
+  app.use("/frontend/*", serveStatic({ root: "./" }));
+
   // 1. Rutas Públicas / Auth
   app.route("/auth", authRouter);
   app.route("/auth/ssr", authSSR);
@@ -44,6 +49,11 @@ try {
     const token = getCookie(c, "access_token");
     // Aquí deberías validar el token realmente (verify JWT), no solo ver si existe
     if (!token) {
+      // For API calls, return 401
+      if (c.req.header("authorization")) {
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+      // For browser requests, redirect to login
       return c.redirect("/auth/ssr/login");
     }
     await next();
@@ -52,8 +62,45 @@ try {
   // 3. Montar el Dashboard Genérico
   app.route("/dashboard", dashboardRouter);
 
+  // API routes for SvelteKit frontend
+  app.route("/api", authRouter);
+
+  // Add users, roles, and permissions routes if they don't exist
+  try {
+    const { usersRouter } = await import("./routers/users");
+    app.route("/api/users", usersRouter);
+  } catch (e) {
+    console.log("Users router not found");
+  }
+
+  try {
+    const { rolesRouter } = await import("./routers/roles");
+    app.route("/api/roles", rolesRouter);
+  } catch (e) {
+    console.log("Roles router not found");
+  }
+
+  try {
+    const { permissionsRouter } = await import("./routers/permissions");
+    app.route("/api/permissions", permissionsRouter);
+  } catch (e) {
+    console.log("Permissions router not found");
+  }
+
   // Redirección root
-  app.get("/", (c) => c.redirect("/dashboard"));
+  app.get("/", (c) => {
+    // If accessing the root with browser, serve the frontend app
+    const userAgent = c.req.header("user-agent") || "";
+    if (
+      userAgent.includes("Mozilla") ||
+      userAgent.includes("Chrome") ||
+      userAgent.includes("Safari")
+    ) {
+      return c.redirect("/frontend");
+    }
+    // For API calls, redirect to dashboard API
+    return c.redirect("/dashboard");
+  });
 } catch (error) {
   console.error("Error Fatal inicializando App:", error);
 }
