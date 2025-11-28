@@ -1,72 +1,61 @@
+// src/index.ts
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
-import { csrf } from 'hono/csrf';
-import { getCookie } from 'hono/cookie';
-import { html } from 'hono/html';
-import { authRouter } from './routers/auth';
-import { authSSR } from './routers/auth_ssr';
-import { dbInitializer, authService } from './db';
-import { getSchemas,getDefaultSchemas } from "./database/base-controller";
+import { csrf } from "hono/csrf";
+import { getCookie } from "hono/cookie";
+import { html } from "hono/html";
+
+// Imports de tu lógica
+import { authRouter } from "./routers/auth";
+import { authSSR } from "./routers/auth_ssr";
+import { dashboard as dashboardRouter } from "./routers/dashboard"; // <--- IMPORT NUEVO
+import { dbInitializer } from "./db";
+
 const app = new Hono();
 
+// Middlewares Globales
 app.use("*", logger());
 app.use("*", prettyJSON());
 app.use(
-    "*",
-    cors({
-        origin: "*", // Add your frontend URL
-        allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allowHeaders: ["Content-Type", "Authorization"],
-        credentials: true,
-    }),
+  "*",
+  cors({
+    origin: "*",
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  }),
 );
-app.use('*', csrf()); // Protect against CSRF
+
+// Protección CSRF (Nota: a veces interfiere con APIs JSON puras, úsalo con cuidado)
+// app.use('*', csrf());
 
 try {
-    await dbInitializer.initialize();
-    const schemas = getDefaultSchemas();
-    const userSchema = schemas.find((t)=>t.tableName === 'users');
-    console.log("userSchema",userSchema)
-//    const allusers = await authService.getUsers(); console.log("allusers", allusers);
-    console.log('DB inicializada correctamente');
+  await dbInitializer.initialize();
+  console.log("DB inicializada correctamente");
 
-    // API Routes
-    app.route('/auth', authRouter);
+  // 1. Rutas Públicas / Auth
+  app.route("/auth", authRouter);
+  app.route("/auth/ssr", authSSR);
 
-    // SSR Routes
-    app.route('/auth/ssr', authSSR);
+  // 2. Middleware de Protección para el Dashboard
+  app.use("/dashboard/*", async (c, next) => {
+    const token = getCookie(c, "access_token");
+    // Aquí deberías validar el token realmente (verify JWT), no solo ver si existe
+    if (!token) {
+      return c.redirect("/auth/ssr/login");
+    }
+    await next();
+  });
 
-    // Protected Dashboard Example
-    app.get('/dashboard', (c) => {
-        const token = getCookie(c, 'access_token');
-        if (!token) return c.redirect('/auth/ssr/login');
+  // 3. Montar el Dashboard Genérico
+  app.route("/dashboard", dashboardRouter);
 
-        return c.html(html`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Dashboard</title>
-                <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-                <script src="https://cdn.tailwindcss.com"></script>
-            </head>
-            <body class="bg-gray-900 text-white p-10">
-                <h1 class="text-3xl font-bold mb-4">Bienvenido al Dashboard</h1>
-                <p class="mb-4">Has iniciado sesión correctamente.</p>
-                <button 
-                    hx-post="/auth/ssr/logout" 
-                    class="px-4 py-2 bg-red-600 rounded hover:bg-red-700"
-                >
-                    Cerrar Sesión
-                </button>
-            </body>
-            </html>
-        `);
-    });
-
+  // Redirección root
+  app.get("/", (c) => c.redirect("/dashboard"));
 } catch (error) {
-    console.error('Error inicializando DB:', error);
+  console.error("Error Fatal inicializando App:", error);
 }
 
 export default app;

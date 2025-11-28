@@ -17,7 +17,7 @@
     "@faker-js/faker": "^10.1.0",
     "@hono/zod-validator": "^0.7.5",
     "hono": "^4.10.7",
-    "open-bauth": "^1.3.6",
+    "open-bauth": "^1.3.7",
     "zod": "^4.1.13"
   }
 }
