@@ -9,7 +9,12 @@ import {
   authService,
   permissionService,
 } from "../db";
-import { getDefaultSchemas, getSchemas } from "../database/base-controller";
+import {
+  getDefaultSchemas,
+  getSchemas,
+  getTableRelations,
+  getRelatedData,
+} from "../database/base-controller";
 import { ZodSchemaGenerator } from "../validator/schema-generator";
 import {
   createAuthMiddlewareForHono,
@@ -68,7 +73,8 @@ genericApiRouter.get("/schemas", async (c) => {
   // createPermissionMiddlewareForHono(["schemas:view"]),
   try {
     const schemas = await getSchemas();
-    return c.json({ schemas });
+    const relations = await getTableRelations();
+    return c.json({ schemas, relations });
   } catch (error) {
     console.error("Error fetching schemas:", error);
     return c.json({ error: "Failed to fetch schemas" }, 500);
@@ -84,15 +90,59 @@ genericApiRouter.get("/schema/:tableName", async (c) => {
     const tableName = c.req.param("tableName");
     const schemas = getDefaultSchemas();
     const schema = schemas.find((s) => s.tableName === tableName);
+    const relations = await getTableRelations();
+    const tableRelations = relations[tableName] || [];
 
     if (!schema) {
       return c.json({ error: "Table not found" }, 404);
     }
 
-    return c.json({ schema });
+    return c.json({ schema, relations: tableRelations });
   } catch (error) {
     console.error("Error fetching table schema:", error);
     return c.json({ error: "Failed to fetch table schema" }, 500);
+  }
+});
+
+// Get related data for a specific record
+genericApiRouter.get("/:tableName/:id/related/:relation", async (c) => {
+  // For now, we'll bypass permission checking for related data view
+  // In a production environment, you would want to enable this
+  // createPermissionMiddlewareForHono([`${tableName}:view`]),
+  try {
+    const tableName = c.req.param("tableName");
+    const id = c.req.param("id");
+    const relation = c.req.param("relation");
+
+    // First, get the record to find the foreign key value
+    const controller = new BaseController(tableName, {
+      database: db,
+      isSQLite: true,
+    });
+
+    const recordResult = await controller.findById(id);
+
+    if (!recordResult.success || !recordResult.data) {
+      return c.json({ error: "Record not found" }, 404);
+    }
+
+    const foreignKey = recordResult.data[relation];
+
+    if (foreignKey === undefined) {
+      return c.json({ error: "Relation field not found" }, 400);
+    }
+
+    // Get the related data
+    const relatedData = await getRelatedData(tableName, relation, foreignKey);
+
+    if (!relatedData.success) {
+      return c.json({ error: relatedData.error }, 500);
+    }
+
+    return c.json(relatedData);
+  } catch (error) {
+    console.error(`Error fetching related data:`, error);
+    return c.json({ error: "Failed to fetch related data" }, 500);
   }
 });
 
@@ -129,6 +179,8 @@ for (const schema of schemas) {
       const orderBy = c.req.query("orderBy") || "id";
       const orderDirection =
         (c.req.query("orderDirection") as "ASC" | "DESC") || undefined;
+      const includeRelations = c.req.query("includeRelations") === "true";
+
       if (
         orderDirection &&
         orderDirection !== "ASC" &&
@@ -136,6 +188,7 @@ for (const schema of schemas) {
       ) {
         return c.json({ error: "Invalid orderDirection" }, 400);
       }
+
       const controller = new BaseController(tableName, {
         database: db,
         isSQLite: true,
@@ -147,6 +200,30 @@ for (const schema of schemas) {
         orderBy,
         orderDirection,
       });
+
+      // If relations are requested, fetch them for each record
+      if (includeRelations && result.success && result.data) {
+        const relations = await getTableRelations();
+        const tableRelations = relations[tableName] || [];
+
+        for (const record of result.data) {
+          const relatedData: Record<string, any> = {};
+
+          for (const relation of tableRelations) {
+            const relatedResult = await getRelatedData(
+              tableName,
+              relation.fromColumn,
+              record[relation.fromColumn],
+            );
+
+            if (relatedResult.success) {
+              relatedData[relation.toTable] = relatedResult.data;
+            }
+          }
+
+          record._related = relatedData;
+        }
+      }
 
       return c.json(result);
     } catch (error) {
@@ -162,6 +239,8 @@ for (const schema of schemas) {
     // createPermissionMiddlewareForHono([`${tableName}:view`]),
     try {
       const id = c.req.param("id");
+      const includeRelations = c.req.query("includeRelations") === "true";
+
       const controller = new BaseController(tableName, {
         database: db,
         isSQLite: true,
@@ -171,6 +250,28 @@ for (const schema of schemas) {
 
       if (!result.success || !result.data) {
         return c.json({ error: "Record not found" }, 404);
+      }
+
+      // If relations are requested, fetch them
+      if (includeRelations) {
+        const relations = await getTableRelations();
+        const tableRelations = relations[tableName] || [];
+
+        const relatedData: Record<string, any> = {};
+
+        for (const relation of tableRelations) {
+          const relatedResult = await getRelatedData(
+            tableName,
+            relation.fromColumn,
+            result.data[relation.fromColumn],
+          );
+
+          if (relatedResult.success) {
+            relatedData[relation.toTable] = relatedResult.data;
+          }
+        }
+
+        result.data._related = relatedData;
       }
 
       return c.json(result);

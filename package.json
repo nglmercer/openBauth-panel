@@ -14,7 +14,8 @@
     "test:security": "bun test tests/api/security",
     "test:all": "bun test tests/api",
     "test:coverage": "bun test --coverage",
-    "setup:test-data": "bun run scripts/setup-test-data.ts"
+    "setup:test-data": "bun run scripts/setup-test-data.ts",
+    "init:permissions": "bun run src/scripts/init-permissions.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
