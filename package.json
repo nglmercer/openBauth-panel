@@ -12,6 +12,7 @@
     "test:integration": "bun test tests/api/integration",
     "test:performance": "bun test tests/api/performance",
     "test:security": "bun test tests/api/security",
+    "test:users": "bun test tests/users.test.ts",
     "test:all": "bun test tests/api",
     "test:coverage": "bun test --coverage",
     "setup:test-data": "bun run scripts/setup-test-data.ts",

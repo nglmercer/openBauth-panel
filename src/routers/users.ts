@@ -159,6 +159,7 @@ usersRouter.delete(
   // Use requirePermissions middleware and add self-deletion protection
   requirePermissions(["users:delete"]),
   asyncHandler(async (c: any): Promise<Response> => {
+    console.log("DEBUG: usersRouter.delete reached");
     const authContext = c.get("auth") as any;
     const userId = authContext?.user?.id as string | null;
     const targetId = c.req.param("id");

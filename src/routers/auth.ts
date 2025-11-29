@@ -132,16 +132,25 @@ authRouter.post("/login", zValidator("json", loginSchema), async (c) => {
 authRouter.post("/refresh", zValidator("json", refreshSchema), async (c) => {
   try {
     const { refreshToken } = c.req.valid("json");
-    const result =
-      await jwtService.verifyRefreshTokenWithSecurity(refreshToken);
+    console.log("DEBUG: Received refresh token:", refreshToken);
+    const payload = await jwtService.verifyRefreshTokenWithSecurity(refreshToken);
+
+    // Fetch user details first
+    const user = await authService.findUserById(payload.userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Generate new access token
+    const token = await jwtService.generateToken(user as any);
 
     // Set new access token cookie
-    if (result.token) {
+    if (token) {
       const isSecure =
         c.req.header("x-forwarded-proto") === "https" ||
         c.req.url.startsWith("https://");
 
-      setCookie(c, "access_token", result.token, {
+      setCookie(c, "access_token", token, {
         maxAge: 15 * 60, // 15 minutes
         httpOnly: true,
         secure: isSecure,
@@ -150,8 +159,9 @@ authRouter.post("/refresh", zValidator("json", refreshSchema), async (c) => {
       });
     }
 
-    return c.json(result);
+    return c.json({ user, token, success: true });
   } catch (error) {
+    console.error("DEBUG: Refresh endpoint error:", error);
     return c.json(notResult(error), 401);
   }
 });

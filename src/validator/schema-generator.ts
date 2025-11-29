@@ -33,6 +33,9 @@ export class ZodSchemaGenerator {
       if (type === "update") {
         // En update todo es opcional
         validator = validator.optional();
+        if (!col.notNull) {
+          validator = validator.nullable();
+        }
       } else if (type === "create") {
         // En create, si tiene default o permite null, es opcional
         if (!col.notNull || col.defaultValue !== undefined) {
