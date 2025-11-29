@@ -158,13 +158,12 @@ describe("Dynamic Table Operations", () => {
         // La ruta debería estar implementada ahora, pero puede devolver 403 si hay permisos
         expect([200, 403]).toContain(response.status);
         if (response.status === 200) {
-          const data = await response.json();
+          const data = (await response.json()) as any;
           // Check for either data.data or data directly (for permissions table)
-          const responseData = (await response.json()) as any;
-          if (responseData.data) {
-            expect(responseData.data).toBeInstanceOf(Array);
+          if (data.data) {
+            expect(data.data).toBeInstanceOf(Array);
           } else {
-            expect(responseData).toBeInstanceOf(Array);
+            expect(data).toBeInstanceOf(Array);
           }
         }
       });

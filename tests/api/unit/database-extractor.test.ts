@@ -154,7 +154,8 @@ describe("Database Schema Extractor", () => {
       expect(inStockColumn).toBeDefined();
       // Check if defaultValue is defined before asserting its value
       if (inStockColumn?.dflt_value !== undefined) {
-        expect(inStockColumn?.dflt_value).toBe(0);
+        // SQLite returns boolean values as strings "0" or "1"
+        expect(inStockColumn?.dflt_value).toBe("0");
       }
 
       expect(createdAtColumn).toBeDefined();
