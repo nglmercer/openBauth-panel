@@ -5,6 +5,14 @@ import {
   handleError as handleAppError,
 } from "../types/errors";
 import type { ApiError } from "../types";
+
+/**
+ * Helper function to check if an object is a Hono Context
+ */
+function isHonoContext(obj: any): obj is Context {
+  return obj && typeof obj === "object" && "json" in obj && "req" in obj;
+}
+
 /**
  * Maneja errores de manera consistente y devuelve una respuesta JSON estandarizada
  * @param error - Error capturado
@@ -23,7 +31,7 @@ export function handleApiError(error: any, c: Context) {
           details: error.details,
         },
       },
-      error.statusCode,
+      error.statusCode as any,
     );
   }
 
@@ -38,7 +46,7 @@ export function handleApiError(error: any, c: Context) {
         ...(appError.details && { details: appError.details }),
       },
     },
-    appError.statusCode,
+    appError.statusCode as any,
   );
 }
 
@@ -66,7 +74,7 @@ export function asyncHandler<T extends (...args: any[]) => Promise<any>>(
   return (...args: Parameters<T>) => {
     return Promise.resolve(fn(...args)).catch((error: any) => {
       // Si el primer argumento es un contexto de Hono, manejar el error
-      if (args.length > 0 && args[0] instanceof Context) {
+      if (args.length > 0 && isHonoContext(args[0])) {
         return handleApiError(error, args[0] as Context);
       }
       // Si no, propagar el error

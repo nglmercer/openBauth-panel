@@ -8,13 +8,10 @@ import {
 } from "../middleware/index";
 import type {
   AuthenticatedContext,
-  AppHandler,
   UserWithoutPassword,
   ApiResponse,
-  CrudResult,
-  AppError,
-  CustomError,
 } from "../types";
+import { AppErrorType } from "../types/errors";
 import { asyncHandler, ErrorResponse } from "../utils/error-handler";
 
 const usersRouter = new Hono();
@@ -57,9 +54,7 @@ usersRouter.get(
     // getUsers instead of getAllUsers
     const result = await authService.getUsers();
     const users = result.users;
-    return c.json({ success: true, data: { users } } as ApiResponse<{
-      users: UserWithoutPassword[];
-    }>);
+    return c.json({ success: true, data: { users } });
   }),
 );
 
@@ -103,9 +98,7 @@ usersRouter.get(
     return c.json({
       success: true,
       data: { user: userWithoutPassword },
-    } as ApiResponse<{
-      user: UserWithoutPassword;
-    }>);
+    });
   }),
 );
 
@@ -114,18 +107,25 @@ usersRouter.post(
   "/",
   createPermissionMiddlewareForHono(["users:create"]),
   zValidator("json", createUserSchema),
-  asyncHandler(async (c: AuthenticatedContext): Promise<Response> => {
+  asyncHandler(async (c) => {
     // El middleware ya verificó los permisos
+    try {
+      const userData = c.req.valid("json") as z.infer<typeof createUserSchema>;
+      const newUser = await authService.register(userData);
 
-    const userData = c.req.valid() as z.infer<typeof createUserSchema>;
-    const newUser = await authService.register(userData);
-
-    return c.json(
-      { success: true, data: { user: newUser } },
-      201,
-    ) as ApiResponse<{
-      user: UserWithoutPassword;
-    }>;
+      return c.json({ success: true, data: { user: newUser } }, 201);
+    } catch (error: any) {
+      return c.json(
+        {
+          success: false,
+          error: {
+            message: error.message || "Failed to create user",
+            type: AppErrorType.VALIDATION_ERROR,
+          },
+        },
+        400,
+      );
+    }
   }),
 );
 
@@ -138,7 +138,7 @@ usersRouter.put(
     permissionService,
   }),
   zValidator("json", updateUserSchema),
-  asyncHandler(async (c: AuthenticatedContext): Promise<Response> => {
+  asyncHandler(async (c) => {
     const userId = c.get("auth")?.user?.id as string | null;
     const targetId = c.req.param("id");
 
@@ -156,25 +156,38 @@ usersRouter.put(
       }
     }
 
-    const updateData = c.req.valid() as z.infer<typeof updateUserSchema>;
-    const result = await authService.updateUser(targetId, updateData);
-    const updatedUser = result.user;
+    try {
+      const updateData = c.req.valid("json") as z.infer<
+        typeof updateUserSchema
+      >;
+      const result = await authService.updateUser(targetId, updateData);
+      const updatedUser = result.user;
 
-    if (!updatedUser) {
-      return c.json(ErrorResponse.notFound("User not found"), 404);
-    }
+      if (!updatedUser) {
+        return c.json(ErrorResponse.notFound("User not found"), 404);
+      }
 
-    // No incluir contraseña en la respuesta
-    if ("password" in updatedUser) {
-      delete updatedUser.password;
+      // No incluir contraseña en la respuesta
+      if ("password" in updatedUser) {
+        delete updatedUser.password;
+      }
+      const { ...userWithoutPassword } = updatedUser as UserWithoutPassword;
+      return c.json({
+        success: true,
+        data: { user: userWithoutPassword },
+      });
+    } catch (error: any) {
+      return c.json(
+        {
+          success: false,
+          error: {
+            message: error.message || "Failed to update user",
+            type: AppErrorType.VALIDATION_ERROR,
+          },
+        },
+        400,
+      );
     }
-    const { ...userWithoutPassword } = updatedUser as UserWithoutPassword;
-    return c.json({
-      success: true,
-      data: { user: userWithoutPassword },
-    } as ApiResponse<{
-      user: UserWithoutPassword;
-    }>);
   }),
 );
 
@@ -203,9 +216,7 @@ usersRouter.delete(
     return c.json({
       success: true,
       data: { message: "User deleted successfully" },
-    } as ApiResponse<{
-      message: string;
-    }>);
+    });
   }),
 );
 
