@@ -12,6 +12,7 @@ import { authRouter } from "./routers/auth";
 import { authSSR } from "./routers/auth_ssr";
 import { dashboard as dashboardRouter } from "./routers/dashboard"; // <--- IMPORT NUEVO
 import { usersRouter } from "./routers/users"; // Import users router
+import { genericApiRouter } from "./routers/generic-api"; // Import generic API router
 import { dbInitializer } from "./db";
 
 const app = new Hono();
@@ -66,6 +67,7 @@ try {
   // API routes for SvelteKit frontend
   app.route("/api", authRouter);
   app.route("/api/users", usersRouter);
+  app.route("/api", genericApiRouter);
 
   // Roles and permissions routers not yet implemented
   // To be added when needed
