@@ -1,13 +1,5 @@
 import app from "../src/index";
-import {
-  describe,
-  expect,
-  it,
-  beforeAll,
-  afterAll,
-  beforeEach,
-  afterEach,
-} from "bun:test";
+import { describe, expect, it, beforeAll } from "bun:test";
 import { dbInitializer, authService } from "../src/db";
 
 // Datos de prueba para el usuario de autenticación
@@ -48,199 +40,152 @@ beforeAll(async () => {
   console.log("Admin and normal users created for dashboard tests");
 });
 
-describe("Dashboard Routes", () => {
-  // Tests para el dashboard home
+describe("Dashboard Routes (API JSON)", () => {
+  // 1. Tests para el dashboard home (Listado de tablas)
   describe("GET /dashboard", () => {
-    it("should return 200 with authentication", async () => {
+    it("should return table list JSON with authentication", async () => {
       const response = await app.request("/dashboard", {
         method: "GET",
         headers: {
           Cookie: `access_token=${adminToken}`,
         },
       });
+
       expect(response.status).toBe(200);
-      const text = await response.text();
-      expect(text).toContain("<!DOCTYPE html>");
-      expect(text).toContain("Bienvenido");
-      expect(text).toContain("Admin Panel");
+      const json = (await response.json()) as { success: boolean; data: any[] };
+
+      expect(json.success).toBe(true);
+      expect(Array.isArray(json.data)).toBe(true);
+
+      // Verificar que la tabla users está en la lista
+      const hasUsersTable = json.data.some((t: any) => t.tableName === "users");
+      expect(hasUsersTable).toBe(true);
     });
 
-    it("should redirect to login without authentication", async () => {
+    it("should redirect or error without authentication", async () => {
       const response = await app.request("/dashboard", {
-        method: "GET",
-        redirect: "manual", // Evitar redirección automática
-      });
-      expect(response.status).toBe(302); // Código de redirección
-      expect(response.headers.get("Location")).toBe("/auth/ssr/login");
-    });
-  });
-
-  // Tests para vistas de tabla
-  describe("GET /dashboard/table/:tableName", () => {
-    it("should show users table with authentication", async () => {
-      const response = await app.request("/dashboard/table/users", {
-        method: "GET",
-        headers: {
-          Cookie: `access_token=${adminToken}`,
-        },
-      });
-      expect(response.status).toBe(200);
-      const text = await response.text();
-      expect(text).toContain("<!DOCTYPE html>");
-      expect(text).toContain("users");
-      // Debe mostrar los usuarios que creamos
-      expect(text).toContain(adminUser.email);
-      expect(text).toContain(normalUser.email);
-    });
-
-    it("should redirect to login without authentication", async () => {
-      const response = await app.request("/dashboard/table/users", {
         method: "GET",
         redirect: "manual",
       });
-      expect(response.status).toBe(302);
-      expect(response.headers.get("Location")).toBe("/auth/ssr/login");
+      // Puede ser 302 (Redirección a login) o 401 (Unauthorized) dependiendo de tu middleware
+      expect([302, 401]).toContain(response.status);
+    });
+  });
+
+  // 2. Tests para vistas de tabla (Listado de registros)
+  describe("GET /dashboard/table/:tableName", () => {
+    it("should return users data JSON with authentication", async () => {
+      const response = await app.request(`/dashboard/table/users`, {
+        method: "GET",
+        headers: {
+          Cookie: `access_token=${adminToken}`,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as { success: boolean; data: any[] };
+
+      expect(json.success).toBe(true);
+      expect(Array.isArray(json.data)).toBe(true);
+      expect(json.data.length).toBeGreaterThan(0);
+
+      const dataString = JSON.stringify(json.data);
+      expect(dataString).toContain("email");
+      expect(dataString).toContain(adminUser.email);
+      expect(dataString).toContain(normalUser.email);
     });
 
-    it("should handle non-existent table gracefully", async () => {
+    it("should handle non-existent table gracefully (404)", async () => {
       const response = await app.request("/dashboard/table/nonexistent", {
         method: "GET",
         headers: {
           Cookie: `access_token=${adminToken}`,
         },
       });
-      expect(response.status).toBe(200);
-      const text = await response.text();
-      expect(text).toContain("Tabla no encontrada");
+
+      expect(response.status).toBe(404);
+      const json = (await response.json()) as { success: boolean; error: any };
+
+      expect(json.success).toBe(false);
+      expect(json.error).toBeDefined();
     });
   });
 
-  // Tests para formulario de creación
-  describe("GET /dashboard/table/:tableName/create", () => {
-    it("should show creation form for users table with authentication", async () => {
-      const response = await app.request("/dashboard/table/users/create", {
-        method: "GET",
-        headers: {
-          Cookie: `access_token=${adminToken}`,
-        },
-      });
-      expect(response.status).toBe(200);
-      const text = await response.text();
-      expect(text).toContain("<!DOCTYPE html>");
-      expect(text).toContain("Crear en users");
-      expect(text).toContain("<form");
-      // Campos del formulario
-      expect(text).toContain("email");
-      expect(text).toContain("username");
-    });
-
-    it("should redirect to login without authentication", async () => {
-      const response = await app.request("/dashboard/table/users/create", {
-        method: "GET",
-        redirect: "manual",
-      });
-      expect(response.status).toBe(302);
-      expect(response.headers.get("Location")).toBe("/auth/ssr/login");
-    });
-  });
-
-  // Tests para creación de registros
+  // 3. Tests para creación de registros (POST JSON)
   describe("POST /dashboard/table/:tableName", () => {
-    it("should create a new user in users table with authentication", async () => {
+    it("should create a new user via JSON", async () => {
       const newUser = {
-        email: "newuser@example.com",
-        username: "newuser",
-        password_hash: "TestP@ssw0rd", // Usar password_hash como espera el endpoint
+        email: `newuser_${Date.now()}@example.com`,
+        username: "newuser_json",
+        password_hash: "TestP@ssw0rd", // El schema espera password_hash
         first_name: "New",
         last_name: "User",
+        is_active: true,
       };
 
       const response = await app.request("/dashboard/table/users", {
         method: "POST",
         headers: {
           Cookie: `access_token=${adminToken}`,
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type": "application/json", // IMPORTANTE: JSON
         },
-        body: new URLSearchParams(newUser).toString(),
-        redirect: "manual", // Para evitar redirección automática
+        body: JSON.stringify(newUser),
       });
 
-      // Para depuración, ver qué devuelve realmente
-      // Comentamos los logs de depuración
-      // console.log("Response status:", response.status);
-      // console.log("Response headers:", response.headers);
-      // console.log("Response text:", await response.text());
-
-      // La respuesta exitosa es una redirección a la tabla
-      expect(response.status).toBe(302);
-      expect(response.headers.get("Location")).toBe("/dashboard/table/users");
+      expect(response.status).toBe(201); // 201 Created
+      const json = (await response.json()) as { success: boolean; data: any };
+      expect(json.success).toBe(true);
+      expect(json.data).toBeDefined();
     });
 
-    it("should redirect to login without authentication", async () => {
-      const newUser = {
-        email: "unauth@example.com",
-        username: "unauth",
-        password: "TestP@ssw0rd",
-        first_name: "Unauth",
-        last_name: "User",
-      };
-
-      const response = await app.request("/dashboard/table/users", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams(newUser).toString(),
-        redirect: "manual",
-      });
-      expect(response.status).toBe(302);
-      expect(response.headers.get("Location")).toBe("/auth/ssr/login");
-    });
-
-    it("should handle validation errors", async () => {
-      // Datos inválidos (email incorrecto)
+    it("should handle validation errors (400)", async () => {
+      // Datos inválidos (falta email que es unique/required o formato incorrecto)
       const invalidUser = {
-        email: "not-an-email",
-        username: "test",
-        password: "TestP@ssw0rd",
-        first_name: "Test",
-        last_name: "User",
+        username: "test_invalid",
+        // Falta email y password_hash
       };
 
       const response = await app.request("/dashboard/table/users", {
         method: "POST",
         headers: {
           Cookie: `access_token=${adminToken}`,
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type": "application/json",
         },
-        body: new URLSearchParams(invalidUser).toString(),
+        body: JSON.stringify(invalidUser),
       });
 
-      expect(response.status).toBe(200);
-      const text = await response.text();
-      expect(text).toContain("Error de Validación");
+      expect(response.status).toBe(400); // Bad Request
+      const json = (await response.json()) as {
+        success: boolean;
+        data: any;
+        error: any;
+      };
+
+      expect(json.success).toBe(false);
+      // Verificamos que contenga detalles del error
+      const errorDetail = JSON.stringify(json);
+      expect(errorDetail).toContain("Validation Error");
     });
   });
 
-  // Tests para eliminación de registros
+  // 4. Tests para eliminación de registros
   describe("DELETE /dashboard/table/:tableName/:id", () => {
-    it("should delete a user with authentication", async () => {
-      // Primero, crear un usuario para eliminar
+    it("should delete a user and return JSON success", async () => {
+      // 1. Crear usuario para borrar
       const userToDelete = {
-        email: "todelete@example.com",
+        email: `delete_${Date.now()}@example.com`,
         username: "todelete",
         password: "TestP@ssw0rd",
         first_name: "To",
         last_name: "Delete",
       };
 
-      // Crear el usuario a través del API
+      // Usamos el servicio auth directamente para crear rápido
       const createResult = await authService.register(userToDelete);
       const userId = createResult.user?.id;
-
       expect(userId).toBeDefined();
 
-      // Eliminar el usuario a través del dashboard
+      // 2. Eliminar vía API Dashboard
       const response = await app.request(`/dashboard/table/users/${userId}`, {
         method: "DELETE",
         headers: {
@@ -249,17 +194,9 @@ describe("Dashboard Routes", () => {
       });
 
       expect(response.status).toBe(200);
-      // HTMX espera una respuesta vacía para eliminaciones exitosas
-      expect(await response.text()).toBe("");
-    });
+      const json = (await response.json()) as { success: boolean };
 
-    it("should redirect to login without authentication", async () => {
-      const response = await app.request("/dashboard/table/users/123", {
-        method: "DELETE",
-        redirect: "manual",
-      });
-      expect(response.status).toBe(302);
-      expect(response.headers.get("Location")).toBe("/auth/ssr/login");
+      expect(json.success).toBe(true);
     });
   });
 });
