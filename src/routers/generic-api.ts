@@ -15,6 +15,17 @@ import {
   createAuthMiddlewareForHono,
   createPermissionMiddlewareForHono,
 } from "../middleware";
+import type {
+  AuthenticatedContext,
+  AppHandler,
+  TableData,
+  TableColumn,
+  ApiResponse,
+  CrudResult,
+  AppError,
+  QueryOptions,
+} from "../types";
+import { asyncHandler, ErrorResponse } from "../utils/error-handler";
 
 const genericApiRouter = new Hono();
 
@@ -191,10 +202,12 @@ for (const schema of schemas) {
       }
 
       return c.json(result, 201);
-    } catch (error: any) {
+    } catch (error: unknown | Error) {
       console.error(`Error creating ${tableName}:`, error);
       return c.json(
-        { error: error.message || `Failed to create ${tableName}` },
+        ErrorResponse.database(
+          error instanceof Error ? error.message : "Failed to create record",
+        ),
         500,
       );
     }
@@ -223,10 +236,12 @@ for (const schema of schemas) {
       }
 
       return c.json(result);
-    } catch (error: any) {
+    } catch (error: unknown | Error) {
       console.error(`Error updating ${tableName}:`, error);
       return c.json(
-        { error: error.message || `Failed to update ${tableName}` },
+        ErrorResponse.database(
+          error instanceof Error ? error.message : "Failed to update record",
+        ),
         500,
       );
     }
@@ -254,10 +269,12 @@ for (const schema of schemas) {
       }
 
       return c.json({ message: "Record deleted successfully" });
-    } catch (error: any) {
+    } catch (error: unknown | Error) {
       console.error(`Error deleting ${tableName}:`, error);
       return c.json(
-        { error: error.message || `Failed to delete ${tableName}` },
+        ErrorResponse.database(
+          error instanceof Error ? error.message : "Failed to delete record",
+        ),
         500,
       );
     }

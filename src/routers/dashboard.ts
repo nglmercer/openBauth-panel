@@ -5,11 +5,20 @@ import { BaseController } from "open-bauth"; // Ajusta imports
 import { getSchemas, getDefaultSchemas } from "../database/base-controller";
 import { dbInitializer, db } from "../db"; // Tu instancia de DB
 import { ZodSchemaGenerator } from "../validator/schema-generator";
+import type {
+  AuthenticatedContext,
+  AppHandler,
+  TableData,
+  TableColumn,
+  ApiResponse,
+  AppError,
+} from "../types";
+import { asyncHandler, ErrorResponse } from "../utils/error-handler";
 
 const dashboard = new Hono();
 
 // Layout Base
-const layout = (content: any, title: string = "Dashboard") => html`
+const layout = (content: unknown, title: string = "Dashboard") => html`
   <!DOCTYPE html>
   <html>
     <head>
@@ -124,10 +133,10 @@ dashboard.get("/table/:tableName", async (c) => {
             </thead>
             <tbody>
               ${html`${result.data?.map(
-                (row: any) => html`
+                (row: TableData) => html`
                   <tr class="hover:bg-gray-750 border-b border-gray-700">
                     ${html`${columns.map(
-                      (col) =>
+                      (col: string) =>
                         html`<td class="p-3 truncate max-w-xs">
                           ${row[col]}
                         </td>`,
@@ -252,13 +261,13 @@ dashboard.post("/table/:tableName", async (c) => {
     if (!result.success) throw new Error(result.error);
 
     return c.redirect(`/dashboard/table/${tableName}`);
-  } catch (e: any) {
+  } catch (e: unknown) {
     return c.html(
       layout(html`
         <div class="bg-red-900/50 p-4 rounded border border-red-500 mb-4">
           <h3 class="font-bold text-red-200">Error de Validación</h3>
           <pre class="mt-2 text-sm text-red-300 overflow-auto">
-${e.message}</pre
+${(e as Error).message}</pre
           >
           <a
             href="javascript:history.back()"
