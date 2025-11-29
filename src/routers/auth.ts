@@ -9,9 +9,35 @@ import {
   permissionService,
 } from "../db";
 import { errorString, notResult } from "../utils/errors";
-import { setCookie } from "hono/cookie";
+import { setCookie, getCookie } from "hono/cookie";
+import { AuthService } from "open-bauth";
 
 const authRouter = new Hono();
+
+// Helper function to set auth cookies
+async function setAuthCookies(c: any, result: any) {
+  if (result.token && result.refreshToken) {
+    const isSecure =
+      c.req.header("x-forwarded-proto") === "https" ||
+      c.req.url.startsWith("https://");
+
+    setCookie(c, "access_token", result.token, {
+      maxAge: 15 * 60, // 15 minutes
+      httpOnly: true,
+      secure: isSecure,
+      sameSite: "Strict",
+      path: "/",
+    });
+
+    setCookie(c, "refresh_token", result.refreshToken, {
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+      httpOnly: true,
+      secure: isSecure,
+      sameSite: "Strict",
+      path: "/",
+    });
+  }
+}
 // Schema register (requiere todo)
 const registerSchema = z.object({
   email: email("Debe ser un email válido"),
@@ -51,30 +77,23 @@ authRouter.post("/register", zValidator("json", registerSchema), async (c) => {
     const data = c.req.valid("json");
     const result = await authService.register(data);
 
-    // Set HTTP-only cookies for tokens
-    if (result.token && result.refreshToken) {
-      const isSecure =
-        c.req.header("x-forwarded-proto") === "https" ||
-        c.req.url.startsWith("https://");
-
-      setCookie(c, "access_token", result.token, {
-        maxAge: 15 * 60, // 15 minutes
-        httpOnly: true,
-        secure: isSecure,
-        sameSite: "Strict",
-        path: "/",
-      });
-
-      setCookie(c, "refresh_token", result.refreshToken, {
-        maxAge: 7 * 24 * 60 * 60, // 7 days
-        httpOnly: true,
-        secure: isSecure,
-        sameSite: "Strict",
-        path: "/",
-      });
+    // Generar refreshToken si no está presente
+    let enhancedResult = result;
+    if (result.token && !result.refreshToken) {
+      // Generamos un refresh token manualmente
+      const refreshToken = await jwtService.generateRefreshToken(
+        (result as any).user?.id || "",
+      );
+      enhancedResult = {
+        ...result,
+        refreshToken,
+      };
     }
 
-    return c.json(result, 201);
+    // Set HTTP-only cookies for tokens
+    await setAuthCookies(c, enhancedResult);
+
+    return c.json(enhancedResult, 201);
   } catch (error) {
     return c.json(notResult(error), 400);
   }
@@ -86,30 +105,24 @@ authRouter.post("/login", zValidator("json", loginSchema), async (c) => {
     const data = c.req.valid("json");
     const result = await authService.login(data);
 
-    // Set HTTP-only cookies for tokens
-    if (result.token && result.refreshToken) {
-      const isSecure =
-        c.req.header("x-forwarded-proto") === "https" ||
-        c.req.url.startsWith("https://");
-
-      setCookie(c, "access_token", result.token, {
-        maxAge: 15 * 60, // 15 minutes
-        httpOnly: true,
-        secure: isSecure,
-        sameSite: "Strict",
-        path: "/",
-      });
-
-      setCookie(c, "refresh_token", result.refreshToken, {
-        maxAge: 7 * 24 * 60 * 60, // 7 days
-        httpOnly: true,
-        secure: isSecure,
-        sameSite: "Strict",
-        path: "/",
-      });
+    // Generar refreshToken si no está presente
+    let enhancedResult = result;
+    if (result.token && !result.refreshToken) {
+      // Generamos un refresh token manualmente
+      const user = await authService.findUserByEmail(data.email);
+      if (user) {
+        const refreshToken = await jwtService.generateRefreshToken(user.id);
+        enhancedResult = {
+          ...result,
+          refreshToken,
+        };
+      }
     }
 
-    return c.json(result);
+    // Set HTTP-only cookies for tokens
+    await setAuthCookies(c, enhancedResult);
+
+    return c.json(enhancedResult);
   } catch (error) {
     return c.json(notResult(error), 401);
   }
@@ -146,7 +159,17 @@ authRouter.post("/refresh", zValidator("json", refreshSchema), async (c) => {
 // Me (GET current authenticated user)
 authRouter.get("/me", async (c) => {
   try {
-    const token = c.req.header("authorization")?.replace("Bearer ", "");
+    // Primero intentamos obtener el token de la cookie
+    let token = getCookie(c, "access_token");
+
+    // Si no hay cookie, intentamos obtener el token del header Authorization
+    if (!token) {
+      const authHeader = c.req.header("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.substring(7); // Eliminamos "Bearer " del inicio
+      }
+    }
+
     if (!token) {
       return c.json({ error: errorString("No token provided") }, 401);
     }

@@ -13,7 +13,7 @@ import { authSSR } from "./routers/auth_ssr";
 import { dashboard as dashboardRouter } from "./routers/dashboard"; // <--- IMPORT NUEVO
 import { usersRouter } from "./routers/users"; // Import users router
 import { genericApiRouter } from "./routers/generic-api"; // Import generic API router
-import { dbInitializer } from "./db";
+import { dbInitializer, jwtService } from "./db";
 
 const app = new Hono();
 
@@ -48,8 +48,27 @@ try {
 
   // 2. Middleware de Protección para el Dashboard
   app.use("/dashboard/*", async (c, next) => {
-    const token = getCookie(c, "access_token");
-    // Aquí deberías validar el token realmente (verify JWT), no solo ver si existe
+    // Primero intentamos obtener el token de la cookie
+    let token = getCookie(c, "access_token");
+
+    // Si no hay cookie, intentamos obtener el token del header Authorization
+    if (!token) {
+      const authHeader = c.req.header("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.substring(7); // Eliminamos "Bearer " del inicio
+      }
+    }
+
+    // Validar el token (verificar JWT)
+    if (token) {
+      try {
+        await jwtService.verifyToken(token);
+      } catch (error) {
+        token = undefined; // Token inválido
+      }
+    }
+
+    // Si no hay token válido
     if (!token) {
       // For API calls, return 401
       if (c.req.header("authorization")) {
