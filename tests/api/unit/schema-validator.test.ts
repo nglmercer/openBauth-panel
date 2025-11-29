@@ -1,6 +1,6 @@
 // tests/api/unit/schema-validator.test.ts
 import { ZodSchemaGenerator } from "../../../src/validator/schema-generator";
-import { TableSchema, ColumnDefinition } from "open-bauth";
+import type { TableSchema, ColumnDefinition } from "open-bauth";
 import { describe, expect, it } from "bun:test";
 
 describe("ZodSchemaGenerator", () => {

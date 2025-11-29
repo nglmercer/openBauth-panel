@@ -47,7 +47,7 @@ beforeEach(async () => {
     }),
   });
 
-  const loginData = await loginResponse.json();
+  const loginData = (await loginResponse.json()) as { token: string };
   authToken = loginData.token;
 });
 
@@ -62,7 +62,9 @@ describe("GET /api/tables", () => {
     });
 
     expect(response.status).toBe(200);
-    const data = await response.json();
+    const data = (await response.json()) as {
+      tables: Array<{ name: string; columns: number }>;
+    };
     expect(data.tables).toBeInstanceOf(Array);
     expect(data.tables.length).toBeGreaterThan(0);
   });
@@ -79,7 +81,7 @@ describe("GET /api/schemas", () => {
     });
 
     expect(response.status).toBe(200);
-    const data = await response.json();
+    const data = (await response.json()) as { schemas: Array<unknown> };
     expect(data.schemas).toBeInstanceOf(Array);
     expect(data.schemas.length).toBeGreaterThan(0);
   });
@@ -158,10 +160,11 @@ describe("Dynamic Table Operations", () => {
         if (response.status === 200) {
           const data = await response.json();
           // Check for either data.data or data directly (for permissions table)
-          if (data.data) {
-            expect(data.data).toBeInstanceOf(Array);
+          const responseData = (await response.json()) as any;
+          if (responseData.data) {
+            expect(responseData.data).toBeInstanceOf(Array);
           } else {
-            expect(data).toBeInstanceOf(Array);
+            expect(responseData).toBeInstanceOf(Array);
           }
         }
       });
@@ -180,7 +183,10 @@ describe("Dynamic Table Operations", () => {
         // La ruta debería estar implementada ahora, pero puede devolver 403 si hay permisos
         expect([201, 403, 400]).toContain(response.status);
         if (response.status === 201) {
-          const data = await response.json();
+          const data = (await response.json()) as {
+            success: boolean;
+            data: { id?: string | number };
+          };
           expect(data.success).toBe(true);
           expect(data.data).toBeDefined();
 
@@ -208,7 +214,7 @@ describe("Dynamic Table Operations", () => {
         // La ruta debería estar implementada ahora, pero puede devolver 403 si hay permisos
         expect([200, 403, 404]).toContain(response.status);
         if (response.status === 200) {
-          const data = await response.json();
+          const data = (await response.json()) as any;
           // For permissions table, response might be different
           if (schema.tableName === "permissions") {
             expect(data).toBeDefined();
@@ -225,7 +231,7 @@ describe("Dynamic Table Operations", () => {
       // Test para actualizar un registro
       it(`should update a record in ${schema.tableName}`, async () => {
         // Preparar datos de actualización
-        const updateData = {};
+        const updateData: Record<string, any> = {};
         for (const column of schema.columns) {
           // Solo actualizar campos que no son primary key
           if (!column.primaryKey) {
@@ -291,7 +297,7 @@ describe("Authentication", () => {
   it("should get schema for a specific table", async () => {
     const schemas = getDefaultSchemas();
     if (schemas.length > 0) {
-      const tableName = schemas[0].tableName;
+      const tableName = schemas[0]?.tableName || "users";
       const response = await app.request(`/api/schema/${tableName}`, {
         method: "GET",
         headers: {
@@ -301,8 +307,9 @@ describe("Authentication", () => {
 
       expect(response.status).toBe(200);
       const data = await response.json();
-      expect(data.schema).toBeDefined();
-      expect(data.schema.tableName).toBe(tableName);
+      const schemaData = data as { schema: { tableName: string } };
+      expect(schemaData.schema).toBeDefined();
+      expect(schemaData.schema.tableName).toBe(tableName);
     }
   });
 });

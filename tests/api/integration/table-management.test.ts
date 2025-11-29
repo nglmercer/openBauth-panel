@@ -69,7 +69,7 @@ describe("Table Management Integration Tests", () => {
     });
 
     const adminLoginData = await adminLoginResponse.json();
-    adminToken = adminLoginData.token;
+    adminToken = (adminLoginData as any).token;
 
     // Login como usuario normal
     const normalUserLoginResponse = await app.request("/auth/login", {
@@ -84,7 +84,7 @@ describe("Table Management Integration Tests", () => {
     });
 
     const normalUserLoginData = await normalUserLoginResponse.json();
-    normalUserToken = normalUserLoginData.token;
+    normalUserToken = (normalUserLoginData as any).token;
   });
 
   describe("Table Discovery", () => {
@@ -97,11 +97,11 @@ describe("Table Management Integration Tests", () => {
       });
 
       expect(response.status).toBe(200);
-      const data = await response.json();
+      const data = (await response.json()) as any;
       expect(data.tables).toBeInstanceOf(Array);
       expect(data.tables.length).toBeGreaterThan(0);
 
-      // Verificar que todas las tablas tienen el formato correcto
+      // Verify table structure
       data.tables.forEach((table: any) => {
         expect(table.name).toBeDefined();
         expect(table.columns).toBeDefined();
@@ -118,11 +118,11 @@ describe("Table Management Integration Tests", () => {
       });
 
       expect(response.status).toBe(200);
-      const data = await response.json();
+      const data = (await response.json()) as any;
       expect(data.schemas).toBeInstanceOf(Array);
       expect(data.schemas.length).toBeGreaterThan(0);
 
-      // Verificar que todos los esquemas tienen el formato correcto
+      // Verify schema structure
       data.schemas.forEach((schema: any) => {
         expect(schema.tableName).toBeDefined();
         expect(schema.columns).toBeInstanceOf(Array);
@@ -145,7 +145,7 @@ describe("Table Management Integration Tests", () => {
         },
       });
 
-      const tablesData = await tablesResponse.json();
+      const tablesData = (await tablesResponse.json()) as any;
       const firstTableName = tablesData.tables[0].name;
 
       // Luego obtener el esquema de la primera tabla
@@ -156,7 +156,7 @@ describe("Table Management Integration Tests", () => {
         },
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as any;
       if (data.schema) {
         expect(data.schema.tableName).toBe(firstTableName);
         expect(data.schema.columns).toBeInstanceOf(Array);
@@ -192,31 +192,29 @@ describe("Table Management Integration Tests", () => {
     // Solo probar con la primera tabla para mantener las pruebas cortas
     if (schemas.length > 0) {
       const testSchema = schemas[0];
-      const tableName = testSchema.tableName;
+      const tableName = testSchema?.tableName || "users";
 
       describe(`CRUD operations for ${tableName}`, () => {
         // Preparar datos de prueba según el esquema de la tabla
         let sampleData: Record<string, any> = {};
 
         beforeEach(() => {
-          sampleData = {};
-          for (const column of testSchema.columns) {
-            // Ignorar campos auto-incrementales o con valores por defecto automáticos
+          // Generate test data for each column
+          sampleData = {} as Record<string, any>;
+          for (const column of testSchema?.columns || []) {
+            // Skip auto-increment and default value fields
             if (
               column.autoIncrement ||
-              column.defaultValue === "CURRENT_TIMESTAMP" ||
-              column.primaryKey
+              column.defaultValue === "CURRENT_TIMESTAMP"
             ) {
               continue;
             }
 
-            // Generar datos de prueba según el tipo de columna
+            // Generate appropriate test data based on column type
             switch (column.type.toUpperCase()) {
               case "INTEGER":
               case "SERIAL":
-                if (!column.primaryKey) {
-                  sampleData[column.name] = Math.floor(Math.random() * 1000);
-                }
+                sampleData[column.name] = Math.floor(Math.random() * 100);
                 break;
               case "REAL":
                 sampleData[column.name] = Math.random() * 100;
@@ -227,8 +225,6 @@ describe("Table Management Integration Tests", () => {
                   sampleData[column.name] = `test_${Date.now()}@example.com`;
                 } else if (column.name.toLowerCase().includes("password")) {
                   sampleData[column.name] = "TestP@ssw0rd";
-                } else if (column.name.toLowerCase().includes("name")) {
-                  sampleData[column.name] = `Test${Date.now()}`;
                 } else {
                   sampleData[column.name] = `Test value for ${column.name}`;
                 }
@@ -261,7 +257,10 @@ describe("Table Management Integration Tests", () => {
           if (createdRecords[tableName]) {
             expect([200, 403]).toContain(response.status);
             if (response.status === 200) {
-              const data = await response.json();
+              const data = (await response.json()) as {
+                success?: boolean;
+                data?: any;
+              };
               expect(data.success).toBe(true);
               expect(data.data).toBeDefined();
             }
@@ -273,8 +272,9 @@ describe("Table Management Integration Tests", () => {
           // Guardar el ID del registro creado para usar en otros tests
           if (response.status === 201) {
             const data = await response.json();
-            if (data.data && data.data.id) {
-              createdRecords[tableName] = data.data.id;
+            const responseData = data as any;
+            if (responseData.data && responseData.data.id) {
+              createdRecords[tableName] = responseData.data.id;
             }
           }
 
@@ -291,7 +291,7 @@ describe("Table Management Integration Tests", () => {
 
           expect([200, 403]).toContain(response.status);
           if (response.status === 200) {
-            const data = await response.json();
+            const data = (await response.json()) as any;
             expect(data.data).toBeInstanceOf(Array);
           }
         });
@@ -308,9 +308,13 @@ describe("Table Management Integration Tests", () => {
               body: JSON.stringify(sampleData),
             });
 
-            const createData = await createResponse.json();
-            if (createData.data && createData.data.id) {
-              createdRecords[tableName] = createData.data.id;
+            const createData = (await createResponse.json()) as any;
+            if (
+              createData &&
+              (createData as any).data &&
+              (createData as any).data.id
+            ) {
+              createdRecords[tableName] = (createData as any).data.id;
             }
           }
 
@@ -326,7 +330,7 @@ describe("Table Management Integration Tests", () => {
           if (createdRecords[tableName]) {
             expect([200, 403]).toContain(response.status);
             if (response.status === 200) {
-              const data = await response.json();
+              const data = (await response.json()) as any;
               expect(data.success).toBe(true);
               expect(data.data).toBeDefined();
               expect(data.data.id).toBe(createdRecords[tableName]);
@@ -352,7 +356,7 @@ describe("Table Management Integration Tests", () => {
             });
 
             if (createResponse.status === 201) {
-              const createData = await createResponse.json();
+              const createData = (await createResponse.json()) as any;
               if (createData.data && createData.data.id) {
                 createdRecords[tableName] = createData.data.id;
                 testId = createData.data.id;
@@ -361,8 +365,8 @@ describe("Table Management Integration Tests", () => {
           }
 
           // Preparar datos de actualización
-          const updateData = {};
-          for (const column of testSchema.columns) {
+          const updateData = {} as Record<string, any>;
+          for (const column of testSchema?.columns || []) {
             // Solo actualizar campos que no son primary key
             if (!column.primaryKey) {
               switch (column.type.toUpperCase()) {
@@ -396,7 +400,7 @@ describe("Table Management Integration Tests", () => {
 
           expect([200, 403, 400]).toContain(response.status);
           if (response.status === 200) {
-            const data = await response.json();
+            const data = (await response.json()) as any;
             expect(data.success).toBe(true);
             expect(data.data).toBeDefined();
           }
@@ -417,7 +421,7 @@ describe("Table Management Integration Tests", () => {
             });
 
             if (createResponse.status === 201) {
-              const createData = await createResponse.json();
+              const createData = (await createResponse.json()) as any;
               if (createData.data && createData.data.id) {
                 createdRecords[tableName] = createData.data.id;
                 testId = createData.data.id;
@@ -434,7 +438,7 @@ describe("Table Management Integration Tests", () => {
 
           expect([200, 403]).toContain(response.status);
           if (response.status === 200) {
-            const data = await response.json();
+            const data = (await response.json()) as any;
             expect(data.message).toBeDefined();
           }
         });
@@ -453,7 +457,7 @@ describe("Table Management Integration Tests", () => {
 
           expect([200, 403]).toContain(responseWithLimit.status);
           if (responseWithLimit.status === 200) {
-            const dataWithLimit = await responseWithLimit.json();
+            const dataWithLimit = (await responseWithLimit.json()) as any;
             expect(dataWithLimit.data).toBeInstanceOf(Array);
           }
 
@@ -470,7 +474,7 @@ describe("Table Management Integration Tests", () => {
 
           expect([200, 403]).toContain(responseWithOrder.status);
           if (responseWithOrder.status === 200) {
-            const dataWithOrder = await responseWithOrder.json();
+            const dataWithOrder = (await responseWithOrder.json()) as any;
             expect(dataWithOrder.data).toBeInstanceOf(Array);
           }
         });
@@ -500,7 +504,7 @@ describe("Table Management Integration Tests", () => {
         },
       });
 
-      const tablesData = await tablesResponse.json();
+      const tablesData = (await tablesResponse.json()) as any;
       const firstTableName = tablesData.tables[0].name;
 
       // Enviar datos inválidos
@@ -526,7 +530,7 @@ describe("Table Management Integration Tests", () => {
         },
       });
 
-      const tablesData = await tablesResponse.json();
+      const tablesData = (await tablesResponse.json()) as any;
       const firstTableName = tablesData.tables[0].name;
 
       // Intentar obtener un registro que no existe

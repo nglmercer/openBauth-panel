@@ -60,7 +60,7 @@ describe("Security Tests", () => {
     });
 
     const adminLoginData = await adminLoginResponse.json();
-    adminToken = adminLoginData.token;
+    adminToken = (adminLoginData as any).token;
 
     // Login como usuario normal
     const normalUserLoginResponse = await app.request("/auth/login", {
@@ -75,7 +75,7 @@ describe("Security Tests", () => {
     });
 
     const normalUserLoginData = await normalUserLoginResponse.json();
-    normalUserToken = normalUserLoginData.token;
+    normalUserToken = (normalUserLoginData as any).token;
   });
 
   describe("Authentication Security", () => {
@@ -88,7 +88,7 @@ describe("Security Tests", () => {
       // In production, this should be 401 for missing authorization
       expect([200, 401]).toContain(response.status);
       if (response.status === 401) {
-        const data = await response.json();
+        const data = (await response.json()) as { error?: string };
         expect(data.error).toBeDefined();
       }
     });
@@ -105,7 +105,7 @@ describe("Security Tests", () => {
       // In production, this should be 401 for malformed authorization
       expect([200, 401]).toContain(response.status);
       if (response.status === 401) {
-        const data = await response.json();
+        const data = (await response.json()) as { error?: string };
         expect(data.error).toBeDefined();
       }
     });
@@ -122,7 +122,7 @@ describe("Security Tests", () => {
       // In production, this should be 401 for invalid token
       expect([200, 401]).toContain(response.status);
       if (response.status === 401) {
-        const data = await response.json();
+        const data = (await response.json()) as { error?: string };
         expect(data.error).toBeDefined();
       }
     });
@@ -143,7 +143,7 @@ describe("Security Tests", () => {
       // In production, this should be 401 for expired token
       expect([200, 401]).toContain(response.status);
       if (response.status === 401) {
-        const data = await response.json();
+        const data = (await response.json()) as { error?: string };
         expect(data.error).toBeDefined();
       }
     });
@@ -160,7 +160,7 @@ describe("Security Tests", () => {
       });
 
       const tablesData = await tablesResponse.json();
-      const firstTableName = tablesData.tables[0].name;
+      const firstTableName = (tablesData as any).tables[0].name;
 
       // Intentar inyección SQL en parámetros de consulta
       const sqlInjectionAttempts = [
@@ -197,7 +197,7 @@ describe("Security Tests", () => {
       });
 
       const tablesData = await tablesResponse.json();
-      const firstTableName = tablesData.tables[0].name;
+      const firstTableName = (tablesData as any).tables[0].name;
 
       // Enviar JSON malformado
       const response = await app.request(`/api/${firstTableName}`, {
@@ -223,7 +223,7 @@ describe("Security Tests", () => {
       });
 
       const tablesData = await tablesResponse.json();
-      const firstTableName = tablesData.tables[0].name;
+      const firstTableName = (tablesData as any).tables[0].name;
 
       // Crear un objeto JSON muy grande
       const largeData = {
