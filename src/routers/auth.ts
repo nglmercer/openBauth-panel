@@ -157,26 +157,17 @@ authRouter.post("/refresh", zValidator("json", refreshSchema), async (c) => {
 });
 
 // Me (GET current authenticated user)
-authRouter.get("/me", async (c) => {
+authRouter.get("/me", async (c: any) => {
+  // Obtenemos el contexto de autenticación del middleware global
+  const auth = c.get("auth") as any;
+
+  if (!auth || !auth.isAuthenticated) {
+    return c.json({ error: "No token provided" }, 401);
+  }
+
   try {
-    // Primero intentamos obtener el token de la cookie
-    let token = getCookie(c, "access_token");
-
-    // Si no hay cookie, intentamos obtener el token del header Authorization
-    if (!token) {
-      const authHeader = c.req.header("authorization");
-      if (authHeader && authHeader.startsWith("Bearer ")) {
-        token = authHeader.substring(7); // Eliminamos "Bearer " del inicio
-      }
-    }
-
-    if (!token) {
-      return c.json({ error: errorString("No token provided") }, 401);
-    }
-
-    const payload = await jwtService.verifyToken(token);
-    const user = await authService.findUserById(payload.userId);
-    if (!user) return c.json({ error: errorString("User not found") }, 404);
+    const user = await authService.findUserById(auth.user?.id);
+    if (!user) return c.json({ error: "User not found" }, 404);
 
     // Don't return password hash
     const { password, ...userWithoutPassword } = user as any;
@@ -221,21 +212,25 @@ authRouter.post("/logout", async (c) => {
 });
 
 // Update profile
-authRouter.put("/profile", async (c) => {
+authRouter.put("/profile", async (c: any) => {
   try {
-    const token = c.req.header("authorization")?.replace("Bearer ", "");
-    if (!token) {
-      return c.json({ error: errorString("No token provided") }, 401);
+    // Obtenemos el contexto de autenticación del middleware global
+    const auth = c.get("auth") as any;
+
+    if (!auth || !auth.isAuthenticated) {
+      return c.json({ error: "No token provided" }, 401);
     }
 
-    const payload = await jwtService.verifyToken(token);
+    const user = await authService.findUserById(auth.user?.id);
+    if (!user) return c.json({ error: "User not found" }, 404);
+
     const data = await c.req.json();
 
-    const user = await authService.updateUser(payload.userId, data);
-    if (!user) return c.json({ error: errorString("User not found") }, 404);
+    const updatedUser = await authService.updateUser(auth.userId, data);
+    if (!updatedUser) return c.json({ error: "User not found" }, 404);
 
     // Don't return password hash
-    const { password, ...userWithoutPassword } = user as any;
+    const { password, ...userWithoutPassword } = updatedUser as any;
     return c.json(userWithoutPassword);
   } catch (error) {
     return c.json(notResult(error), 500);
@@ -243,14 +238,14 @@ authRouter.put("/profile", async (c) => {
 });
 
 // Change password
-authRouter.post("/change-password", async (c) => {
+authRouter.post("/change-password", async (c: any) => {
   try {
-    const token = c.req.header("authorization")?.replace("Bearer ", "");
-    if (!token) {
-      return c.json({ error: errorString("No token provided") }, 401);
-    }
+    // Obtenemos el contexto de autenticación del middleware global
+    const auth = c.get("auth") as any;
 
-    const payload = await jwtService.verifyToken(token);
+    if (!auth || !auth.isAuthenticated) {
+      return c.json({ error: "No token provided" }, 401);
+    }
     const { currentPassword, newPassword, confirmPassword } =
       await c.req.json();
 
@@ -259,7 +254,7 @@ authRouter.post("/change-password", async (c) => {
     }
 
     const result = await authService.changePassword(
-      payload.userId,
+      auth.user?.id,
       currentPassword,
       newPassword,
     );

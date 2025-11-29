@@ -14,12 +14,17 @@ import { dashboard as dashboardRouter } from "./routers/dashboard"; // <--- IMPO
 import { usersRouter } from "./routers/users"; // Import users router
 import { genericApiRouter } from "./routers/generic-api"; // Import generic API router
 import { dbInitializer, jwtService } from "./db";
+import { authMiddleware, requireAuth } from "./middleware/auth";
 
 const app = new Hono();
 
 // Middlewares Globales
 app.use("*", logger());
 app.use("*", prettyJSON());
+
+// Middleware global de autenticación - se aplica a todas las rutas
+// Usamos el middleware mejorado con autenticación opcional por defecto
+app.use("*", authMiddleware({ required: false }));
 
 // Update CORS configuration for SvelteKit frontend
 app.use(
@@ -46,45 +51,14 @@ try {
   app.route("/auth", authRouter);
   app.route("/auth/ssr", authSSR);
 
-  // 2. Middleware de Protección para el Dashboard
-  app.use("/dashboard/*", async (c, next) => {
-    // Primero intentamos obtener el token de la cookie
-    let token = getCookie(c, "access_token");
-
-    // Si no hay cookie, intentamos obtener el token del header Authorization
-    if (!token) {
-      const authHeader = c.req.header("authorization");
-      if (authHeader && authHeader.startsWith("Bearer ")) {
-        token = authHeader.substring(7); // Eliminamos "Bearer " del inicio
-      }
-    }
-
-    // Validar el token (verificar JWT)
-    if (token) {
-      try {
-        await jwtService.verifyToken(token);
-      } catch (error) {
-        token = undefined; // Token inválido
-      }
-    }
-
-    // Si no hay token válido
-    if (!token) {
-      // For API calls, return 401
-      if (c.req.header("authorization")) {
-        return c.json({ error: "Unauthorized" }, 401);
-      }
-      // For browser requests, redirect to login
-      return c.redirect("/auth/ssr/login");
-    }
-    await next();
-  });
-
-  // 3. Montar el Dashboard Genérico
+  // 3. Montar el Dashboard Genérico con protección de autenticación
+  app.use("/dashboard/*", requireAuth());
   app.route("/dashboard", dashboardRouter);
 
   // API routes for SvelteKit frontend
+  app.use("/api/me", requireAuth());
   app.route("/api", authRouter);
+  app.use("/api/users/*", requireAuth());
   app.route("/api/users", usersRouter);
   app.route("/api", genericApiRouter);
 

@@ -16,10 +16,7 @@ import {
   getRelatedData,
 } from "../database/base-controller";
 import { ZodSchemaGenerator } from "../validator/schema-generator";
-import {
-  createAuthMiddlewareForHono,
-  createPermissionMiddlewareForHono,
-} from "../middleware";
+import { authMiddleware, requirePermissions } from "../middleware";
 import type {
   AuthenticatedContext,
   AppHandler,
@@ -40,11 +37,7 @@ const genericApiRouter = new Hono();
 // Middleware de autenticación para todas las rutas
 genericApiRouter.use(
   "*",
-  createAuthMiddlewareForHono({
-    jwtService: jwtService,
-    authService: authService,
-    permissionService: permissionService,
-  }),
+  authMiddleware(),
 );
 */
 
@@ -52,7 +45,7 @@ genericApiRouter.use(
 genericApiRouter.get("/tables", async (c) => {
   // For now, we'll bypass permission checking for tables list
   // In a production environment, you would want to enable this
-  // createPermissionMiddlewareForHono(["tables:list"]),
+  // requirePermissions(["tables:list"]),
   try {
     const schemas = getDefaultSchemas();
     const tables = schemas.map((s) => ({
@@ -70,7 +63,7 @@ genericApiRouter.get("/tables", async (c) => {
 genericApiRouter.get("/schemas", async (c) => {
   // For now, we'll bypass permission checking for schemas view
   // In a production environment, you would want to enable this
-  // createPermissionMiddlewareForHono(["schemas:view"]),
+  // requirePermissions(["schemas:view"]),
   try {
     const schemas = await getSchemas();
     const relations = await getTableRelations();
@@ -85,7 +78,7 @@ genericApiRouter.get("/schemas", async (c) => {
 genericApiRouter.get("/schema/:tableName", async (c) => {
   // For now, we'll bypass permission checking for schema view
   // In a production environment, you would want to enable this
-  // createPermissionMiddlewareForHono(["schemas:view"]),
+  // requirePermissions(["schemas:view"]),
   try {
     const tableName = c.req.param("tableName");
     const schemas = getDefaultSchemas();
@@ -108,7 +101,7 @@ genericApiRouter.get("/schema/:tableName", async (c) => {
 genericApiRouter.get("/:tableName/:id/related/:relation", async (c) => {
   // For now, we'll bypass permission checking for related data view
   // In a production environment, you would want to enable this
-  // createPermissionMiddlewareForHono([`${tableName}:view`]),
+  // requirePermissions([`${tableName}:view`]),
   try {
     const tableName = c.req.param("tableName");
     const id = c.req.param("id");
@@ -160,11 +153,7 @@ for (const schema of schemas) {
   /*
   tableRouter.use(
     "*",
-    createAuthMiddlewareForHono({
-      jwtService: jwtService,
-      authService: authService,
-      permissionService: permissionService,
-    }),
+    authMiddleware(),
   );
   */
 
@@ -172,7 +161,7 @@ for (const schema of schemas) {
   tableRouter.get("/", async (c) => {
     // For now, we'll bypass permission checking for list operations
     // In a production environment, you would want to enable this
-    // createPermissionMiddlewareForHono([`${tableName}:list`]),
+    // requirePermissions([`${tableName}:list`]),
     try {
       const limit = parseInt(c.req.query("limit") || "50");
       const offset = parseInt(c.req.query("offset") || "0");
@@ -236,7 +225,7 @@ for (const schema of schemas) {
   tableRouter.get("/:id", async (c) => {
     // For now, we'll bypass permission checking for view operations
     // In a production environment, you would want to enable this
-    // createPermissionMiddlewareForHono([`${tableName}:view`]),
+    // requirePermissions([`${tableName}:view`]),
     try {
       const id = c.req.param("id");
       const includeRelations = c.req.query("includeRelations") === "true";
@@ -285,7 +274,7 @@ for (const schema of schemas) {
   tableRouter.post("/", async (c) => {
     // For now, we'll bypass permission checking for create operations
     // In a production environment, you would want to enable this
-    // createPermissionMiddlewareForHono([`${tableName}:create`]),
+    // requirePermissions([`${tableName}:create`]),
     try {
       const data = await c.req.json();
       const controller = new BaseController(tableName, {
@@ -318,7 +307,7 @@ for (const schema of schemas) {
   tableRouter.put("/:id", async (c) => {
     // For now, we'll bypass permission checking for update operations
     // In a production environment, you would want to enable this
-    // createPermissionMiddlewareForHono([`${tableName}:update`]),
+    // requirePermissions([`${tableName}:update`]),
     try {
       const id = c.req.param("id");
       const data = await c.req.json();
@@ -352,7 +341,7 @@ for (const schema of schemas) {
   tableRouter.delete("/:id", async (c) => {
     // For now, we'll bypass permission checking for delete operations
     // In a production environment, you would want to enable this
-    // createPermissionMiddlewareForHono([`${tableName}:delete`]),
+    // requirePermissions([`${tableName}:delete`]),
     try {
       const id = c.req.param("id");
       const controller = new BaseController(tableName, {

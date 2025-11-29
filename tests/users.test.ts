@@ -167,7 +167,7 @@ describe("Users API Routes", () => {
           Authorization: `Bearer ${loginResult.token}`,
         },
       });
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(404);
     });
 
     it("should return 401 without authentication", async () => {

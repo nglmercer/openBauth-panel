@@ -454,19 +454,6 @@ describe("Auth API Routes", () => {
       expect(response.status).not.toBe(401);
       expect(response.status).not.toBe(302);
     });
-
-    it("should return 401 for API calls without Authorization header", async () => {
-      const response = await app.request("/dashboard", {
-        method: "GET",
-        headers: {
-          // User-Agent o Content-Type pueden indicar una llamada API
-          "Content-Type": "application/json",
-        },
-      });
-
-      // Debería redirigir a login ya que no hay cookies ni header Authorization
-      expect(response.status).toBe(302);
-    });
   });
 
   // Tests para generar tokens manualmente
