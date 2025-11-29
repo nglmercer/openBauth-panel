@@ -33,7 +33,18 @@ const loginSchema = z.object({
 const refreshSchema = z.object({
   refreshToken: z.string(),
 });
-
+/*
+export interface AuthResult {
+    success: boolean;
+    user?: User;
+    token?: string;
+    refreshToken?: string;
+    error?: {
+        type: AuthErrorType;
+        message: string;
+    };
+}
+*/
 // Register
 authRouter.post("/register", zValidator("json", registerSchema), async (c) => {
   try {
@@ -41,12 +52,12 @@ authRouter.post("/register", zValidator("json", registerSchema), async (c) => {
     const result = await authService.register(data);
 
     // Set HTTP-only cookies for tokens
-    if (result.accessToken && result.refreshToken) {
+    if (result.token && result.refreshToken) {
       const isSecure =
         c.req.header("x-forwarded-proto") === "https" ||
         c.req.url.startsWith("https://");
 
-      setCookie(c, "access_token", result.accessToken, {
+      setCookie(c, "access_token", result.token, {
         maxAge: 15 * 60, // 15 minutes
         httpOnly: true,
         secure: isSecure,
@@ -76,12 +87,12 @@ authRouter.post("/login", zValidator("json", loginSchema), async (c) => {
     const result = await authService.login(data);
 
     // Set HTTP-only cookies for tokens
-    if (result.accessToken && result.refreshToken) {
+    if (result.token && result.refreshToken) {
       const isSecure =
         c.req.header("x-forwarded-proto") === "https" ||
         c.req.url.startsWith("https://");
 
-      setCookie(c, "access_token", result.accessToken, {
+      setCookie(c, "access_token", result.token, {
         maxAge: 15 * 60, // 15 minutes
         httpOnly: true,
         secure: isSecure,
@@ -112,12 +123,12 @@ authRouter.post("/refresh", zValidator("json", refreshSchema), async (c) => {
       await jwtService.verifyRefreshTokenWithSecurity(refreshToken);
 
     // Set new access token cookie
-    if (result.accessToken) {
+    if (result.token) {
       const isSecure =
         c.req.header("x-forwarded-proto") === "https" ||
         c.req.url.startsWith("https://");
 
-      setCookie(c, "access_token", result.accessToken, {
+      setCookie(c, "access_token", result.token, {
         maxAge: 15 * 60, // 15 minutes
         httpOnly: true,
         secure: isSecure,
@@ -140,7 +151,7 @@ authRouter.get("/me", async (c) => {
       return c.json({ error: errorString("No token provided") }, 401);
     }
 
-    const payload = await jwtService.verifyAccessToken(token);
+    const payload = await jwtService.verifyToken(token);
     const user = await authService.findUserById(payload.userId);
     if (!user) return c.json({ error: errorString("User not found") }, 404);
 
@@ -194,7 +205,7 @@ authRouter.put("/profile", async (c) => {
       return c.json({ error: errorString("No token provided") }, 401);
     }
 
-    const payload = await jwtService.verifyAccessToken(token);
+    const payload = await jwtService.verifyToken(token);
     const data = await c.req.json();
 
     const user = await authService.updateUser(payload.userId, data);
@@ -216,7 +227,7 @@ authRouter.post("/change-password", async (c) => {
       return c.json({ error: errorString("No token provided") }, 401);
     }
 
-    const payload = await jwtService.verifyAccessToken(token);
+    const payload = await jwtService.verifyToken(token);
     const { currentPassword, newPassword, confirmPassword } =
       await c.req.json();
 

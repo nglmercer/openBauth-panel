@@ -11,6 +11,7 @@ import { serveStatic } from "hono/bun";
 import { authRouter } from "./routers/auth";
 import { authSSR } from "./routers/auth_ssr";
 import { dashboard as dashboardRouter } from "./routers/dashboard"; // <--- IMPORT NUEVO
+import { usersRouter } from "./routers/users"; // Import users router
 import { dbInitializer } from "./db";
 
 const app = new Hono();
@@ -64,28 +65,10 @@ try {
 
   // API routes for SvelteKit frontend
   app.route("/api", authRouter);
+  app.route("/api/users", usersRouter);
 
-  // Add users, roles, and permissions routes if they don't exist
-  try {
-    const { usersRouter } = await import("./routers/users");
-    app.route("/api/users", usersRouter);
-  } catch (e) {
-    console.log("Users router not found");
-  }
-
-  try {
-    const { rolesRouter } = await import("./routers/roles");
-    app.route("/api/roles", rolesRouter);
-  } catch (e) {
-    console.log("Roles router not found");
-  }
-
-  try {
-    const { permissionsRouter } = await import("./routers/permissions");
-    app.route("/api/permissions", permissionsRouter);
-  } catch (e) {
-    console.log("Permissions router not found");
-  }
+  // Roles and permissions routers not yet implemented
+  // To be added when needed
 
   // Redirección root
   app.get("/", (c) => {
