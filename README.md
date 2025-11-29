@@ -47,3 +47,38 @@ app.use("/moderator/*", requireRoles(["admin", "moderator"]));
 - [Middleware Documentation](src/middleware/README.md) - Complete middleware API reference
 - [Migration Guide](docs/middleware/migration-guide.md) - How to update code for new middleware
 - [Examples](docs/middleware/examples.md) - Practical usage examples
+
+## Client Library
+
+A comprehensive JavaScript/TypeScript client library is available for interacting with the OpenBauth Panel API from external projects:
+
+```typescript
+// Install the client library
+npm install openbauth-panel-client
+
+// Import and use
+import { createOpenBauthPanelClient } from 'openbauth-panel-client';
+
+const client = createOpenBauthPanelClient({
+  host: 'your-api-host.com',
+  port: 3000
+});
+
+// Authentication
+await client.login({ email, password });
+const users = await client.getUsers();
+
+// User management
+const newUser = await client.createUser(userData);
+const updatedUser = await client.updateUser(id, userData);
+
+// Role management
+const roles = await client.getRoles();
+const newRole = await client.createRole(roleData);
+
+// Dynamic table operations
+const tableData = await client.getTableRecords('users');
+const record = await client.createTableRecord('users', data);
+```
+
+For detailed documentation and examples, see the [client directory](./client/README.md).
