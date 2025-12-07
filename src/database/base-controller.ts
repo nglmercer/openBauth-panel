@@ -106,7 +106,7 @@ export class ExtendedBaseController extends BaseController {
             // Add all columns but set non-selected ones to null
             validColumns.forEach((col: string) => {
               if (select.includes(col)) {
-                filtered[col] = row[col] !== undefined ? row[col] : null;
+                filtered[col] = row[col] !== undefined ? this.convertBooleanValue(row[col], col) : null;
                 console.log(`Including column ${col}: ${row[col]}`);
               } else {
                 filtered[col] = null; // Set non-selected columns to null
@@ -214,7 +214,7 @@ export class ExtendedBaseController extends BaseController {
           // Only include selected columns, set others to null
           validColumns.forEach((col: string) => {
             if (select.includes(col)) {
-              filtered[col] = row[col] !== undefined ? row[col] : null;
+              filtered[col] = row[col] !== undefined ? this.convertBooleanValue(row[col], col) : null;
               console.log(`Including column ${col}: ${row[col]}`);
             } else {
               filtered[col] = null; // Set non-selected columns to null
@@ -263,9 +263,10 @@ export class ExtendedBaseController extends BaseController {
           // Apply column selection consistently with findAllWithQuery
           // Include all columns but set non-selected ones to null
           const filteredData: any = {};
+          const data = result.data as any; // Type assertion to avoid undefined checks
           validColumns.forEach((col: string) => {
             if (select.includes(col)) {
-              filteredData[col] = result.data[col] !== undefined ? result.data[col] : null;
+              filteredData[col] = data[col] !== undefined ? this.convertBooleanValue(data[col], col) : null;
             } else {
               filteredData[col] = null; // Set non-selected columns to null
             }
@@ -282,6 +283,61 @@ export class ExtendedBaseController extends BaseController {
         error: error instanceof Error ? error.message : 'Failed to fetch record'
       };
     }
+  }
+
+  /**
+   * Override update method to handle boolean conversion
+   */
+  override async update(id: string, data: any): Promise<any> {
+    try {
+      // First, perform the update using the parent method
+      const result = await super.update(id, data);
+      
+      // If update was successful, convert boolean values in the response
+      if (result.success && result.data) {
+        const validColumns = this.getTableColumns();
+        const convertedData: any = {};
+        
+        validColumns.forEach((col: string) => {
+          if (result.data && result.data.hasOwnProperty(col)) {
+            convertedData[col] = this.convertBooleanValue(result.data[col], col);
+          } else if (result.data) {
+            convertedData[col] = result.data[col];
+          }
+        });
+        
+        result.data = convertedData;
+      }
+      
+      return result;
+    } catch (error) {
+      console.error(`Error in update for ${this.tableName}:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update record'
+      };
+    }
+  }
+
+  /**
+   * Convert boolean-like values to proper boolean type
+   */
+  private convertBooleanValue(value: any, columnName: string): any {
+    // Check if this is likely a boolean column based on name
+    const isBooleanColumn = columnName.includes('is_') ||
+                           columnName.includes('active') ||
+                           columnName.includes('enabled') ||
+                           columnName === 'active';
+    
+    if (isBooleanColumn) {
+      if (value === 1 || value === '1' || value === true || value === 'true') {
+        return true;
+      } else if (value === 0 || value === '0' || value === false || value === 'false' || value === null || value === undefined) {
+        return false;
+      }
+    }
+    
+    return value;
   }
 }
 

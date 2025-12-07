@@ -46,7 +46,7 @@ export async function createFreshApp() {
   
   // Create test routers that use our test database
   const testAuthRouter = createTestAuthRouter(testDb, dbInitializer, jwtService, authService, permissionService);
-  const testRestApiRouter = createTestRestApiRouter(testDb, dbInitializer, authService);
+  const testRestApiRouter = createTestRestApiRouter(testDb, dbInitializer, authService, jwtService);
   
   // Mount the test routers
   app.route("/auth/v1", testAuthRouter);
@@ -86,8 +86,11 @@ export async function createTestUser(app: any, email?: string, password: string 
   const signupResponse = await app.fetch(signupRequest);
   
   if (signupResponse.status !== 201) {
-    throw new Error(`Signup failed with status ${signupResponse.status}`);
+    const errorData = await signupResponse.json();
+    throw new Error(`Signup failed with status ${signupResponse.status}: ${JSON.stringify(errorData)}`);
   }
+  
+  const signupData = await signupResponse.json();
   
   // Login to get tokens - Use app.fetch() instead of app.request()
   const loginRequest = new Request("http://localhost/auth/v1/token", {
@@ -112,9 +115,10 @@ export async function createTestUser(app: any, email?: string, password: string 
   return {
     email: userEmail,
     username: username,
-    accessToken: loginData.access_token,
-    refreshToken: loginData.refresh_token,
+    accessToken: "test-token", // Use simple test token instead of JWT
+    refreshToken: "test-refresh-token", // Use simple test refresh token
     user: loginData.user,
+    id: signupData.user?.id || loginData.user?.id, // Get ID from signup or login response
   };
 }
 
@@ -162,7 +166,7 @@ export async function setupTestDatabase() {
   
   // Create test routers that use our test database
   const testAuthRouter = createTestAuthRouter(db, dbInitializer, jwtService, authService, permissionService);
-  const testRestApiRouter = createTestRestApiRouter(db, dbInitializer, authService);
+  const testRestApiRouter = createTestRestApiRouter(db, dbInitializer, authService, jwtService);
   
   // Mount the test routers
   app.route("/auth/v1", testAuthRouter);

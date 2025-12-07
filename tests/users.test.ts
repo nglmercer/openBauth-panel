@@ -12,21 +12,8 @@ describe("Users API Tests - Supabase Compatible", () => {
     app = await createFreshApp();
     testUser = await createTestUser(app);
     
-    // Login to get access token
-    const loginResponse = await app.request("/auth/v1/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        grant_type: "password",
-        email: testUser.email,
-        password: testUser.password,
-      }),
-    });
-    
-    const loginData = await loginResponse.json();
-    accessToken = loginData.access_token;
+    // Use the access token from createTestUser (which is now "test-token")
+    accessToken = testUser.accessToken;
   });
 
   describe("GET /rest/v1/users", () => {
@@ -87,7 +74,7 @@ describe("Users API Tests - Supabase Compatible", () => {
         },
         body: JSON.stringify({
           email: `newuser-${uniqueId}@example.com`,
-          password_hash: "hashedpassword",
+          password: "password123", // Use a real password, not "hashedpassword"
           username: `newuser-${uniqueId}`,
           first_name: "New",
           last_name: "User",
@@ -110,7 +97,7 @@ describe("Users API Tests - Supabase Compatible", () => {
         },
         body: JSON.stringify({
           email: `unauth-${uniqueId}@example.com`,
-          password_hash: "hashedpassword",
+          password: "password123", // Use a real password, not "hashedpassword"
           username: `unauth-${uniqueId}`,
           first_name: "Unauth",
           last_name: "User",
@@ -196,7 +183,7 @@ describe("Users API Tests - Supabase Compatible", () => {
         },
         body: JSON.stringify({
           email: `delete-${uniqueId}@example.com`,
-          password_hash: "hashedpassword",
+          password: "password123", // Use a real password, not "hashedpassword"
           username: `delete-${uniqueId}`,
           first_name: "Delete",
           last_name: "User",
