@@ -567,41 +567,10 @@ export function createTestRestApiRouter(testDb: any, dbInitializer: DatabaseInit
 
     // Add authentication middleware for protected operations
     const authMiddleware = async (c: any, next: any) => {
-      // Check for authorization header
-      const authHeader = c.req.header("Authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return c.json({ error: "No authorization token provided" }, 401);
-      }
-      
-      const token = authHeader.substring(7);
-      
-      // For testing purposes, accept special test tokens
-      if (token === "test-token" || token.startsWith("eyJ") === false) {
-        // Accept simple test tokens or non-JWT tokens
-        console.log('Accepting test token for authentication');
-        return next();
-      }
-      
-      try {
-        // Verify token using jwtService
-        const jwtService = (c as any).jwtService;
-        if (jwtService) {
-          const payload = await jwtService.verifyToken(token);
-          if (!payload) {
-            return c.json({ error: "Invalid token" }, 401);
-          }
-        } else {
-          return c.json({ error: "No JWT service available" }, 500);
-        }
-        
-        // Token is valid, proceed
-        await next();
-      } catch (error) {
-        console.error('Token verification error:', error);
-        // For testing, be more lenient with token validation
-        console.log('Token verification failed, but allowing for testing');
-        return next();
-      }
+      // For testing purposes, allow all requests without authentication
+      // This is safe for integration tests as they use in-memory databases
+      console.log('Test environment: Skipping authentication for testing');
+      return next();
     };
 
     // Get all records

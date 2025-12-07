@@ -32,15 +32,28 @@ export class PostgrestQueryParser {
   parseFilters(): Record<string, any> {
     const filters: Record<string, any> = {};
 
+    // Collect all values for each parameter to handle multiple filters on same field
+    const paramValues: Record<string, string[]> = {};
     for (const [key, value] of this.queryParams.entries()) {
-      // Ignorar parámetros especiales de PostgREST
-      if (this.isSpecialParam(key)) {
-        continue;
+      if (!this.isSpecialParam(key)) {
+        if (!paramValues[key]) {
+          paramValues[key] = [];
+        }
+        paramValues[key].push(value);
       }
+    }
 
-      // Parsear el valor del filtro
-      const filter = this.parseFilterValue(value);
-      filters[key] = filter;
+    // Process each parameter
+    for (const [key, values] of Object.entries(paramValues)) {
+      if (values.length === 1) {
+        // Single filter for this field
+        const filter = this.parseFilterValue(values[0]);
+        filters[key] = filter;
+      } else {
+        // Multiple filters for the same field - combine them
+        const combinedFilters = values.map(value => this.parseFilterValue(value));
+        filters[key] = combinedFilters;
+      }
     }
 
     return filters;

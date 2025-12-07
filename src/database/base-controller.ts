@@ -135,45 +135,14 @@ export class ExtendedBaseController extends BaseController {
           continue; // Skip invalid columns instead of throwing error
         }
 
-        if (filter && typeof filter === 'object') {
-          // Handle comparison operators
-          if (filter['>'] !== undefined) {
-            whereClauses.push(`${column} > ?`);
-            params.push(filter['>']);
-          } else if (filter['>='] !== undefined) {
-            whereClauses.push(`${column} >= ?`);
-            params.push(filter['>=']);
-          } else if (filter['<'] !== undefined) {
-            whereClauses.push(`${column} < ?`);
-            params.push(filter['<']);
-          } else if (filter['<='] !== undefined) {
-            whereClauses.push(`${column} <= ?`);
-            params.push(filter['<=']);
-          } else if (filter['!='] !== undefined) {
-            if (filter['!='] === null) {
-              whereClauses.push(`${column} IS NOT NULL`);
-            } else {
-              whereClauses.push(`${column} != ?`);
-              params.push(filter['!=']);
-            }
-          } else if (filter['like'] !== undefined) {
-            whereClauses.push(`${column} LIKE ?`);
-            params.push(filter['like']);
-          } else if (filter['ilike'] !== undefined) {
-            // SQLite doesn't have ILIKE, use LIKE with lower() for case-insensitive
-            whereClauses.push(`LOWER(${column}) LIKE LOWER(?)`);
-            params.push(filter['ilike']);
-          } else if (filter['in'] !== undefined && Array.isArray(filter['in'])) {
-            const placeholders = filter['in'].map(() => '?').join(',');
-            whereClauses.push(`${column} IN (${placeholders})`);
-            params.push(...filter['in']);
-          }
-        } else if (filter === null) {
-          whereClauses.push(`${column} IS NULL`);
+        // Handle array of filters (multiple filters on same field)
+        if (Array.isArray(filter)) {
+          filter.forEach(singleFilter => {
+            this.processSingleFilter(column, singleFilter, whereClauses, params);
+          });
         } else {
-          // Simple equality
-          whereClauses.push(`${column} = ?`);
-          params.push(filter);
+          // Single filter for this field
+          this.processSingleFilter(column, filter, whereClauses, params);
         }
       }
 
@@ -316,6 +285,52 @@ export class ExtendedBaseController extends BaseController {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update record'
       };
+    }
+  }
+
+  /**
+   * Process a single filter and add it to where clauses and parameters
+   */
+  private processSingleFilter(column: string, filter: any, whereClauses: string[], params: any[]): void {
+    if (filter && typeof filter === 'object') {
+      // Handle comparison operators
+      if (filter['>'] !== undefined) {
+        whereClauses.push(`${column} > ?`);
+        params.push(filter['>']);
+      } else if (filter['>='] !== undefined) {
+        whereClauses.push(`${column} >= ?`);
+        params.push(filter['>=']);
+      } else if (filter['<'] !== undefined) {
+        whereClauses.push(`${column} < ?`);
+        params.push(filter['<']);
+      } else if (filter['<='] !== undefined) {
+        whereClauses.push(`${column} <= ?`);
+        params.push(filter['<=']);
+      } else if (filter['!='] !== undefined) {
+        if (filter['!='] === null) {
+          whereClauses.push(`${column} IS NOT NULL`);
+        } else {
+          whereClauses.push(`${column} != ?`);
+          params.push(filter['!=']);
+        }
+      } else if (filter['like'] !== undefined) {
+        whereClauses.push(`${column} LIKE ?`);
+        params.push(filter['like']);
+      } else if (filter['ilike'] !== undefined) {
+        // SQLite doesn't have ILIKE, use LIKE with lower() for case-insensitive
+        whereClauses.push(`LOWER(${column}) LIKE LOWER(?)`);
+        params.push(filter['ilike']);
+      } else if (filter['in'] !== undefined && Array.isArray(filter['in'])) {
+        const placeholders = filter['in'].map(() => '?').join(',');
+        whereClauses.push(`${column} IN (${placeholders})`);
+        params.push(...filter['in']);
+      }
+    } else if (filter === null) {
+      whereClauses.push(`${column} IS NULL`);
+    } else {
+      // Simple equality
+      whereClauses.push(`${column} = ?`);
+      params.push(filter);
     }
   }
 
