@@ -47,7 +47,7 @@ export class PostgrestQueryParser {
     for (const [key, values] of Object.entries(paramValues)) {
       if (values.length === 1) {
         // Single filter for this field
-        const filter = this.parseFilterValue(values[0]);
+        const filter = this.parseFilterValue(values[0]!);
         filters[key] = filter;
       } else {
         // Multiple filters for the same field - combine them

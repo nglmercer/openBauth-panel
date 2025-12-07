@@ -51,7 +51,7 @@ restApiRouter.get("/tables", async (c) => {
     const schemas = getDefaultSchemas();
     const tables = schemas.map((s) => ({
       name: s.tableName,
-      columns: s.columns.length,
+      columns: s.columns,
     }));
     return c.json({ tables });
   } catch (error) {
