@@ -1,4 +1,4 @@
-// src/routers/generic-api.ts
+// src/routers/rest-api.ts - Supabase compatible REST API
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { BaseController } from "open-bauth";
@@ -29,7 +29,7 @@ import type {
 } from "../types";
 import { asyncHandler, ErrorResponse } from "../utils/error-handler";
 
-const genericApiRouter = new Hono();
+const restApiRouter = new Hono();
 
 // For testing purposes, we're temporarily bypassing authentication middleware
 // In production, uncomment the following to enable authentication:
@@ -42,7 +42,7 @@ genericApiRouter.use(
 */
 
 // Get all available tables
-genericApiRouter.get("/tables", async (c) => {
+restApiRouter.get("/tables", async (c) => {
   // For now, we'll bypass permission checking for tables list
   // In a production environment, you would want to enable this
   // requirePermissions(["tables:list"]),
@@ -60,7 +60,7 @@ genericApiRouter.get("/tables", async (c) => {
 });
 
 // Get schema information for all tables
-genericApiRouter.get("/schemas", async (c) => {
+restApiRouter.get("/schemas", async (c) => {
   // For now, we'll bypass permission checking for schemas view
   // In a production environment, you would want to enable this
   // requirePermissions(["schemas:view"]),
@@ -75,7 +75,7 @@ genericApiRouter.get("/schemas", async (c) => {
 });
 
 // Get schema for a specific table
-genericApiRouter.get("/schema/:tableName", async (c) => {
+restApiRouter.get("/schema/:tableName", async (c) => {
   // For now, we'll bypass permission checking for schema view
   // In a production environment, you would want to enable this
   // requirePermissions(["schemas:view"]),
@@ -98,7 +98,7 @@ genericApiRouter.get("/schema/:tableName", async (c) => {
 });
 
 // Get related data for a specific record
-genericApiRouter.get("/:tableName/:id/related/:relation", async (c) => {
+restApiRouter.get("/:tableName/:id/related/:relation", async (c) => {
   // For now, we'll bypass permission checking for related data view
   // In a production environment, you would want to enable this
   // requirePermissions([`${tableName}:view`]),
@@ -371,7 +371,7 @@ for (const schema of schemas) {
   });
 
   // Mount the table router
-  genericApiRouter.route(`/${tableName}`, tableRouter);
+  restApiRouter.route(`/${tableName}`, tableRouter);
 }
 
-export { genericApiRouter };
+export { restApiRouter };

@@ -53,7 +53,7 @@ export class OpenBauthPanelClient extends BaseApi {
     userData: RegisterRequest,
     options?: FetchOptions,
   ): Promise<AuthResponse> {
-    return this.post<AuthResponse>("/auth/register", userData, options);
+    return this.post<AuthResponse>("/auth/v1/signup", userData, options);
   }
 
   /**
@@ -66,13 +66,39 @@ export class OpenBauthPanelClient extends BaseApi {
     credentials: LoginRequest,
     options?: FetchOptions,
   ): Promise<AuthResponse> {
-    const response = await this.post<AuthResponse>(
-      "/auth/login",
-      credentials,
+    const response = await this.post<any>(
+      "/auth/v1/token",
+      {
+        grant_type: "password",
+        ...credentials
+      },
       options,
     );
 
-    // Store token and user info if login successful
+    // Handle Supabase-compatible token response format
+    if (response.access_token) {
+      this.token = response.access_token;
+      this.user = response.user || {};
+
+      // Store in localStorage for persistence
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.setItem("token", response.access_token);
+        window.localStorage.setItem(
+          "user",
+          JSON.stringify(response.user || {}),
+        );
+      }
+
+      // Return AuthResponse format for compatibility
+      return {
+        success: true,
+        token: response.access_token,
+        refreshToken: response.refresh_token,
+        user: response.user
+      };
+    }
+
+    // Fallback to original format
     if (response.success && response.token) {
       this.token = response.token;
       this.user = response.user || {};
@@ -96,7 +122,7 @@ export class OpenBauthPanelClient extends BaseApi {
    * @returns Promise resolving to logout response
    */
   async logout(options?: FetchOptions): Promise<ApiResponse> {
-    const response = await this.post<ApiResponse>("/auth/logout", {}, options);
+    const response = await this.post<ApiResponse>("/auth/v1/logout", {}, options);
 
     // Clear stored token and user info
     this.token = undefined;
@@ -117,7 +143,7 @@ export class OpenBauthPanelClient extends BaseApi {
    * @returns Promise resolving to user data
    */
   async me(options?: FetchOptions): Promise<ApiResponse<User>> {
-    return this.get<ApiResponse<User>>("/auth/me", options);
+    return this.get<ApiResponse<User>>("/auth/v1/me", options);
   }
 
   /**
@@ -128,7 +154,7 @@ export class OpenBauthPanelClient extends BaseApi {
   async getPermissions(
     options?: FetchOptions,
   ): Promise<ApiResponse<Permission[]>> {
-    return this.get<ApiResponse<Permission[]>>("/auth/permissions", options);
+    return this.get<ApiResponse<Permission[]>>("/auth/v1/permissions", options);
   }
 
   /**
@@ -141,13 +167,38 @@ export class OpenBauthPanelClient extends BaseApi {
     refreshTokenData: RefreshTokenRequest,
     options?: FetchOptions,
   ): Promise<AuthResponse> {
-    const response = await this.post<AuthResponse>(
-      "/auth/refresh",
-      refreshTokenData,
+    const response = await this.post<any>(
+      "/auth/v1/token",
+      {
+        grant_type: "refresh_token",
+        refresh_token: refreshTokenData.refreshToken
+      },
       options,
     );
 
-    // Update stored token if refresh successful
+    // Handle Supabase-compatible token response format
+    if (response.access_token) {
+      this.token = response.access_token;
+      this.user = response.user || this.user;
+
+      // Update localStorage
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.setItem("token", response.access_token);
+        if (response.user) {
+          window.localStorage.setItem("user", JSON.stringify(response.user));
+        }
+      }
+
+      // Return AuthResponse format for compatibility
+      return {
+        success: true,
+        token: response.access_token,
+        refreshToken: response.refresh_token,
+        user: response.user
+      };
+    }
+
+    // Fallback to original format
     if (response.success && response.token) {
       this.token = response.token;
       this.user = response.user || this.user;
@@ -172,7 +223,7 @@ export class OpenBauthPanelClient extends BaseApi {
    * @returns Promise resolving to paginated users list
    */
   async getUsers(options?: FetchOptions): Promise<PaginatedResponse<User>> {
-    return this.get<PaginatedResponse<User>>("/api/users", options);
+    return this.get<PaginatedResponse<User>>("/rest/v1/users", options);
   }
 
   /**
@@ -185,7 +236,7 @@ export class OpenBauthPanelClient extends BaseApi {
     id: string,
     options?: FetchOptions,
   ): Promise<ApiResponse<User>> {
-    return this.get<ApiResponse<User>>(`/api/users/${id}`, options);
+    return this.get<ApiResponse<User>>(`/rest/v1/users/${id}`, options);
   }
 
   /**
@@ -198,7 +249,7 @@ export class OpenBauthPanelClient extends BaseApi {
     userData: Partial<User>,
     options?: FetchOptions,
   ): Promise<ApiResponse<User>> {
-    return this.post<ApiResponse<User>>("/api/users", userData, options);
+    return this.post<ApiResponse<User>>("/rest/v1/users", userData, options);
   }
 
   /**
@@ -213,7 +264,7 @@ export class OpenBauthPanelClient extends BaseApi {
     userData: Partial<User>,
     options?: FetchOptions,
   ): Promise<ApiResponse<User>> {
-    return this.put<ApiResponse<User>>(`/api/users/${id}`, userData, options);
+    return this.put<ApiResponse<User>>(`/rest/v1/users/${id}`, userData, options);
   }
 
   /**
@@ -223,7 +274,7 @@ export class OpenBauthPanelClient extends BaseApi {
    * @returns Promise resolving to delete response
    */
   async deleteUser(id: string, options?: FetchOptions): Promise<ApiResponse> {
-    return this.delete<ApiResponse>(`/api/users/${id}`, options);
+    return this.delete<ApiResponse>(`/rest/v1/users/${id}`, options);
   }
 
   /**
@@ -237,7 +288,7 @@ export class OpenBauthPanelClient extends BaseApi {
     options?: FetchOptions,
   ): Promise<ApiResponse> {
     return this.post<ApiResponse>(
-      "/api/auth/change-password",
+      "/auth/v1/change-password",
       passwordData,
       options,
     );
@@ -388,7 +439,17 @@ export class OpenBauthPanelClient extends BaseApi {
    * @returns Promise resolving to dashboard data
    */
   async getDashboard(options?: FetchOptions): Promise<ApiResponse> {
-    return this.get<ApiResponse>("/dashboard", options);
+    const response = await this.get<any>("/rest/v1/tables", options);
+    
+    // Handle the response format from rest-api router
+    if (response.tables) {
+      return {
+        success: true,
+        data: response.tables
+      };
+    }
+    
+    return response;
   }
 
   /**
@@ -401,7 +462,7 @@ export class OpenBauthPanelClient extends BaseApi {
     tableName: string,
     options?: FetchOptions,
   ): Promise<ApiResponse> {
-    return this.get<ApiResponse>(`/dashboard/table/${tableName}`, options);
+    return this.get<ApiResponse>(`/rest/v1/${tableName}`, options);
   }
 
   // Generic CRUD methods for dynamic tables
@@ -416,7 +477,7 @@ export class OpenBauthPanelClient extends BaseApi {
     tableName: string,
     options?: FetchOptions,
   ): Promise<ApiResponse> {
-    return this.get<ApiResponse>(`/api/${tableName}`, options);
+    return this.get<ApiResponse>(`/rest/v1/${tableName}`, options);
   }
 
   /**
@@ -431,7 +492,7 @@ export class OpenBauthPanelClient extends BaseApi {
     id: string,
     options?: FetchOptions,
   ): Promise<ApiResponse> {
-    return this.get<ApiResponse>(`/api/${tableName}/${id}`, options);
+    return this.get<ApiResponse>(`/rest/v1/${tableName}/${id}`, options);
   }
 
   /**
@@ -446,7 +507,7 @@ export class OpenBauthPanelClient extends BaseApi {
     data: any,
     options?: FetchOptions,
   ): Promise<ApiResponse> {
-    return this.post<ApiResponse>(`/api/${tableName}`, data, options);
+    return this.post<ApiResponse>(`/rest/v1/${tableName}`, data, options);
   }
 
   /**
@@ -463,7 +524,7 @@ export class OpenBauthPanelClient extends BaseApi {
     data: any,
     options?: FetchOptions,
   ): Promise<ApiResponse> {
-    return this.put<ApiResponse>(`/api/${tableName}/${id}`, data, options);
+    return this.put<ApiResponse>(`/rest/v1/${tableName}/${id}`, data, options);
   }
 
   /**
@@ -478,7 +539,7 @@ export class OpenBauthPanelClient extends BaseApi {
     id: string,
     options?: FetchOptions,
   ): Promise<ApiResponse> {
-    return this.delete<ApiResponse>(`/api/${tableName}/${id}`, options);
+    return this.delete<ApiResponse>(`/rest/v1/${tableName}/${id}`, options);
   }
 
   // Utility methods

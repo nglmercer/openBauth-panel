@@ -10,9 +10,7 @@ import { serveStatic } from "hono/bun";
 // Imports de tu lógica
 import { authRouter } from "./routers/auth";
 import { authSSR } from "./routers/auth_ssr";
-import { dashboard as dashboardRouter } from "./routers/dashboard"; // <--- IMPORT NUEVO
-import { usersRouter } from "./routers/users"; // Import users router
-import { genericApiRouter } from "./routers/generic-api"; // Import generic API router
+import { restApiRouter } from "./routers/rest-api"; // Import REST API router (renamed from generic-api)
 import { dbInitializer, jwtService } from "./db";
 import { authMiddleware, requireAuth } from "./middleware/auth";
 
@@ -22,9 +20,8 @@ const app = new Hono();
 app.use("*", logger());
 app.use("*", prettyJSON());
 
-// Middleware global de autenticación - se aplica a todas las rutas
-// Usamos el middleware mejorado con autenticación opcional por defecto
-app.use("*", authMiddleware({ required: false }));
+// Remove global auth middleware - it was causing issues with auth endpoints
+// Auth middleware will be applied selectively to specific routes that need it
 
 // Update CORS configuration for SvelteKit frontend
 app.use(
@@ -47,20 +44,19 @@ try {
   // Serve static files from frontend build directory
   app.use("/frontend/*", serveStatic({ root: "./" }));
 
-  // 1. Rutas Públicas / Auth
-  app.route("/auth", authRouter);
+  // 1. Rutas Públicas / Auth (Supabase compatible)
+  app.route("/auth/v1", authRouter);
   app.route("/auth/ssr", authSSR);
 
-  // 3. Montar el Dashboard Genérico con protección de autenticación
-  app.use("/dashboard/*", requireAuth());
-  app.route("/dashboard", dashboardRouter);
+  // 2. API CRUD (Supabase compatible)
+  app.route("/rest/v1", restApiRouter);
 
-  // API routes for SvelteKit frontend
-  app.use("/api/me", requireAuth());
-  app.route("/api", authRouter);
-  app.use("/api/users/*", requireAuth());
-  app.route("/api/users", usersRouter);
-  app.route("/api", genericApiRouter);
+  // 3. Eliminar rutas legacy
+  // app.route("/auth", authRouter); // Legacy - eliminado
+  // app.route("/api", authRouter); // Legacy - eliminado
+  // app.route("/api/users", usersRouter); // Legacy - eliminado
+  // app.route("/api", genericApiRouter); // Legacy - eliminado
+  // app.route("/dashboard", dashboardRouter); // Legacy - eliminado
 
   // Roles and permissions routers not yet implemented
   // To be added when needed

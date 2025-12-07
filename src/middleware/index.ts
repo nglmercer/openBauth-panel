@@ -67,10 +67,24 @@ export function authMiddleware(options: AuthOptions = {}) {
     }
 
     try {
-      // Verify the token
-      const payload = await jwtService.verifyToken(token);
+      // Verify the token - handle both access tokens and refresh tokens
+      let payload;
+      try {
+        // First try as an access token
+        payload = await jwtService.verifyToken(token);
+      } catch (accessError) {
+        // If that fails, try as a refresh token
+        try {
+          payload = await jwtService.verifyRefreshTokenWithSecurity(token);
+        } catch (refreshError) {
+          // If both fail, log the errors and throw
+          console.error("Access token verification failed:", accessError);
+          console.error("Refresh token verification failed:", refreshError);
+          throw new Error(`Token verification failed: ${accessError.message}`);
+        }
+      }
 
-      if (!payload.userId) {
+      if (!payload || !payload.userId) {
         return handleAuthError(c, "Invalid token: Missing user ID", 401);
       }
 
@@ -100,7 +114,7 @@ export function authMiddleware(options: AuthOptions = {}) {
       console.error("Authentication error:", error);
 
       if (opts.required) {
-        return handleAuthError(c, "Invalid or expired token", 401);
+        return handleAuthError(c, `Invalid or expired token: ${error.message}`, 401);
       }
 
       // If auth is optional, set anonymous context
@@ -274,8 +288,8 @@ function determineApiRequest(c: Context): boolean {
     authHeader ||
     (contentType && contentType.includes("application/json")) ||
     (acceptHeader && acceptHeader.includes("application/json")) ||
-    // Check if the path starts with /api/
-    (path && path.startsWith("/api/"))
+    // Check if the path starts with /api/ or /auth/v1/ or /rest/v1/
+    (path && (path.startsWith("/api/") || path.startsWith("/auth/v1/") || path.startsWith("/rest/v1/")))
   );
 }
 
