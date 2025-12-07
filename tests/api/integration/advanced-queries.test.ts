@@ -47,8 +47,8 @@ describe("Advanced Queries Integration Tests", () => {
         const user = data.data[0];
         expect(user.id).toBeDefined();
         expect(user.email).toBeDefined();
-        expect(user.name).toBeUndefined(); // Should not be included
-        expect(user.age).toBeUndefined(); // Should not be included
+        expect(user.first_name).toBeNull(); // Should not be included (set to null)
+        expect(user.age).toBeNull(); // Should not be included (set to null)
       }
     });
 
@@ -130,7 +130,7 @@ describe("Advanced Queries Integration Tests", () => {
       const response = await app.fetch(request);
       const data = await response.json();
       
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(400);
       expect(data.error).toBeDefined();
     });
   });

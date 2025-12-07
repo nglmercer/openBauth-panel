@@ -28,10 +28,33 @@ interface ForeignKeyInfo {
  */
 export class ExtendedBaseController extends BaseController {
   private db: any;
+  private dbInitializer: any;
   
   constructor(tableName: string, options: any = {}) {
     super(tableName, options);
     this.db = options.database;
+    this.dbInitializer = options.dbInitializer;
+  }
+
+  /**
+   * Get valid column names for the current table
+   */
+  private getTableColumns(): string[] {
+    try {
+      // Use schemas from dbInitializer if available, otherwise fall back to getDefaultSchemas
+      const schemas = this.dbInitializer ? this.dbInitializer.getSchemas() : getDefaultSchemas();
+      const schema = schemas.find((s: any) => s.tableName === this.tableName);
+      
+      if (!schema) {
+        console.warn(`Schema not found for table: ${this.tableName}`);
+        return [];
+      }
+      
+      return schema.columns.map((col: any) => col.name);
+    } catch (error) {
+      console.error(`Error getting table columns for ${this.tableName}:`, error);
+      return [];
+    }
   }
 
   /**
@@ -47,7 +70,24 @@ export class ExtendedBaseController extends BaseController {
       }
 
       const parser = new PostgrestQueryParser(queryString);
-      const { filters, select, order, range } = parser.parseAll();
+      let filters, select, order, range;
+      
+      try {
+        const parsed = parser.parseAll();
+        filters = parsed.filters;
+        select = parsed.select;
+        order = parsed.order;
+        range = parsed.range;
+      } catch (error) {
+        console.error(`Error parsing query parameters:`, error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Invalid query parameters'
+        };
+      }
+
+      // Get valid column names for validation (declare before use)
+      const validColumns = this.getTableColumns();
 
       // If no filters, use the original method for better compatibility
       if (Object.keys(filters).length === 0) {
@@ -56,10 +96,29 @@ export class ExtendedBaseController extends BaseController {
           options.orderBy = order.orderBy;
           options.orderDirection = order.orderDirection;
         }
-        if (select && select[0] !== '*') {
-          options.select = select;
+        const result = await super.findAll(options);
+        
+        // Apply column selection if needed
+        if (select && select[0] !== '*' && result.success && result.data) {
+          console.log(`Applying column selection. Select: ${select.join(', ')}, Valid columns: ${validColumns.join(', ')}`);
+          result.data = result.data.map((row: any) => {
+            const filtered: any = {};
+            // Add all columns but set non-selected ones to null
+            validColumns.forEach((col: string) => {
+              if (select.includes(col)) {
+                filtered[col] = row[col] !== undefined ? row[col] : null;
+                console.log(`Including column ${col}: ${row[col]}`);
+              } else {
+                filtered[col] = null; // Set non-selected columns to null
+                console.log(`Setting column ${col} to null`);
+              }
+            });
+            console.log(`Filtered row:`, filtered);
+            return filtered;
+          });
         }
-        return await super.findAll(options);
+        
+        return result;
       }
 
       // Build SQL query manually to handle complex filters
@@ -67,8 +126,15 @@ export class ExtendedBaseController extends BaseController {
       const params: any[] = [];
       const whereClauses: string[] = [];
 
-      // Process filters
+
+      // Process filters and validate column names
       for (const [column, filter] of Object.entries(filters)) {
+        // Validate column name to prevent SQL injection and invalid columns
+        if (!validColumns.includes(column)) {
+          console.warn(`Invalid column name in filter: ${column}. Valid columns: ${validColumns.join(', ')}`);
+          continue; // Skip invalid columns instead of throwing error
+        }
+
         if (filter && typeof filter === 'object') {
           // Handle comparison operators
           if (filter['>'] !== undefined) {
@@ -118,7 +184,13 @@ export class ExtendedBaseController extends BaseController {
 
       // Add ORDER BY clause
       if (order) {
-        sql += ` ORDER BY ${order.orderBy} ${order.orderDirection || 'ASC'}`;
+        // Validate order column
+        if (!validColumns.includes(order.orderBy)) {
+          console.warn(`Invalid order column: ${order.orderBy}. Valid columns: ${validColumns.join(', ')}`);
+          throw new Error(`Invalid order column: ${order.orderBy}`);
+        } else {
+          sql += ` ORDER BY ${order.orderBy} ${order.orderDirection || 'ASC'}`;
+        }
       }
 
       // Add LIMIT and OFFSET
@@ -136,13 +208,20 @@ export class ExtendedBaseController extends BaseController {
       // Apply column selection if needed
       let resultData = data;
       if (select && select[0] !== '*') {
+        console.log(`Applying column selection. Select: ${select.join(', ')}, Valid columns: ${validColumns.join(', ')}`);
         resultData = data.map((row: any) => {
           const filtered: any = {};
-          select.forEach((col: string) => {
-            if (row.hasOwnProperty(col)) {
-              filtered[col] = row[col];
+          // Only include selected columns, set others to null
+          validColumns.forEach((col: string) => {
+            if (select.includes(col)) {
+              filtered[col] = row[col] !== undefined ? row[col] : null;
+              console.log(`Including column ${col}: ${row[col]}`);
+            } else {
+              filtered[col] = null; // Set non-selected columns to null
+              console.log(`Setting column ${col} to null`);
             }
           });
+          console.log(`Filtered row:`, filtered);
           return filtered;
         });
       }
@@ -178,11 +257,17 @@ export class ExtendedBaseController extends BaseController {
         const { select } = parser.parseAll();
         
         if (select && select[0] !== '*') {
-          // Filtrar el objeto para solo incluir las columnas seleccionadas
+          // Get valid columns for this table
+          const validColumns = this.getTableColumns();
+          
+          // Apply column selection consistently with findAllWithQuery
+          // Include all columns but set non-selected ones to null
           const filteredData: any = {};
-          select.forEach((column: string) => {
-            if (result.data && result.data.hasOwnProperty(column)) {
-              filteredData[column] = result.data[column];
+          validColumns.forEach((col: string) => {
+            if (select.includes(col)) {
+              filteredData[col] = result.data[col] !== undefined ? result.data[col] : null;
+            } else {
+              filteredData[col] = null; // Set non-selected columns to null
             }
           });
           result.data = filteredData;

@@ -333,6 +333,7 @@ export function createTestRestApiRouter(testDb: any, dbInitializer: DatabaseInit
         const controller = new ExtendedBaseController(tableName, {
           database: testDb,
           isSQLite: true,
+          dbInitializer: dbInitializer,
         });
 
         const queryString = c.req.url.split('?')[1] || '';
@@ -363,11 +364,29 @@ export function createTestRestApiRouter(testDb: any, dbInitializer: DatabaseInit
           }
         }
 
+        // Check if result indicates failure and set appropriate status code
+        if (result && typeof result === 'object' && 'success' in result && !result.success) {
+          const errorMessage = result.error || 'Unknown error';
+          // Check if it's a query parsing error
+          if (errorMessage.includes('Invalid order direction') ||
+              errorMessage.includes('Invalid order parameter') ||
+              errorMessage.includes('Invalid column')) {
+            return c.json(result, 400);
+          }
+          return c.json(result, 500);
+        }
+        
         return c.json(result);
       } catch (error) {
         console.error(`Error fetching ${tableName}:`, error);
         // Return error response with proper format
         if (error instanceof Error) {
+          // Check if it's a query parsing error (invalid parameters)
+          if (error.message.includes('Invalid order direction') ||
+              error.message.includes('Invalid order parameter') ||
+              error.message.includes('Invalid column')) {
+            return c.json({ success: false, error: error.message }, 400);
+          }
           return c.json({ success: false, error: error.message }, 500);
         }
         return c.json({ success: false, error: `Failed to fetch ${tableName}` }, 500);
@@ -384,6 +403,7 @@ export function createTestRestApiRouter(testDb: any, dbInitializer: DatabaseInit
         const controller = new ExtendedBaseController(tableName, {
           database: testDb,
           isSQLite: true,
+          dbInitializer: dbInitializer,
         });
 
         const result = await controller.findByIdWithQuery(id, c.req.url.split('?')[1]);
@@ -452,6 +472,7 @@ export function createTestRestApiRouter(testDb: any, dbInitializer: DatabaseInit
                   const controller = new ExtendedBaseController(tableName, {
                     database: testDb,
                     isSQLite: true,
+                    dbInitializer: dbInitializer,
                   });
                   const updateResult = await controller.update(user.id, { age: data.age });
                   if (updateResult.success) {
@@ -479,6 +500,7 @@ export function createTestRestApiRouter(testDb: any, dbInitializer: DatabaseInit
         const controller = new ExtendedBaseController(tableName, {
           database: testDb,
           isSQLite: true,
+          dbInitializer: dbInitializer,
         });
 
         const result = await controller.create(data);
@@ -510,6 +532,7 @@ export function createTestRestApiRouter(testDb: any, dbInitializer: DatabaseInit
         const controller = new ExtendedBaseController(tableName, {
           database: testDb,
           isSQLite: true,
+          dbInitializer: dbInitializer,
         });
 
         const result = await controller.update(id, data);
@@ -540,6 +563,7 @@ export function createTestRestApiRouter(testDb: any, dbInitializer: DatabaseInit
         const controller = new ExtendedBaseController(tableName, {
           database: testDb,
           isSQLite: true,
+          dbInitializer: dbInitializer,
         });
 
         const result = await controller.delete(id);

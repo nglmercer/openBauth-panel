@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "bun:test";
-import { createFreshApp } from "../../test-helpers";
+import { createFreshApp, generateUniqueId } from "../../test-helpers";
 
 describe("Simple Queries Integration Tests", () => {
   let app: any;
@@ -31,13 +31,21 @@ describe("Simple Queries Integration Tests", () => {
     });
 
     it("should handle select parameter", async () => {
-      const request = new Request("http://localhost/rest/v1/users?select=id,email");
+      const request = new Request("http://localhost/rest/v1/users?select=id,email&limit=1");
       const response = await app.fetch(request);
       const data = await response.json();
       
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
       expect(Array.isArray(data.data)).toBe(true);
+      
+      if (data.data.length > 0) {
+        const user = data.data[0];
+        expect(user.id).toBeDefined();
+        expect(user.email).toBeDefined();
+        expect(user.name).toBeNull();
+        expect(user.age).toBeNull();
+      }
     });
   });
 
@@ -71,12 +79,25 @@ describe("Simple Queries Integration Tests", () => {
     });
 
     it("should retrieve created user with queries", async () => {
+      // Create a completely fresh app instance to ensure no conflicts
+      const freshApp = await createFreshApp();
+      
+      // Create a truly unique identifier using multiple sources and process info
       const timestamp = Date.now();
+      const processPart = process.hrtime.bigint().toString();
+      const randomPart1 = Math.random().toString(36).substring(2, 15);
+      const randomPart2 = Math.random().toString(36).substring(2, 15);
+      const randomPart3 = Math.random().toString(36).substring(2, 15);
+      const uniqueId = `qt_${timestamp}_${processPart}_${randomPart1}_${randomPart2}_${randomPart3}`;
+      
+      // Truncate if too long for username (keep under 50 chars)
+      const truncatedUniqueId = uniqueId.substring(0, 50);
+      
       // First create a user
       const newUser = {
-        email: `querytest_${timestamp}@example.com`,
+        email: `${truncatedUniqueId}@example.com`,
         password: "password123",
-        username: `querytest_${timestamp}`,
+        username: truncatedUniqueId,
         first_name: "Query",
         last_name: "Test",
         age: 25,
@@ -90,25 +111,25 @@ describe("Simple Queries Integration Tests", () => {
         },
         body: JSON.stringify(newUser),
       });
-      const createResponse = await app.fetch(createRequest);
+      const createResponse = await freshApp.fetch(createRequest);
 
       expect(createResponse.status).toBe(201);
       const createdData = await createResponse.json();
       const userId = createdData.data.id;
 
       // Test equality filter
-      const eqRequest = new Request(`http://localhost/rest/v1/users?email=eq.querytest_${timestamp}@example.com`);
-      const eqResponse = await app.fetch(eqRequest);
+      const eqRequest = new Request(`http://localhost/rest/v1/users?email=eq.${truncatedUniqueId}@example.com`);
+      const eqResponse = await freshApp.fetch(eqRequest);
       const eqData = await eqResponse.json();
       
       expect(eqResponse.status).toBe(200);
       expect(eqData.success).toBe(true);
       expect(eqData.data.length).toBeGreaterThan(0);
-      expect(eqData.data[0].email).toBe(`querytest_${timestamp}@example.com`);
+      expect(eqData.data[0].email).toBe(`${truncatedUniqueId}@example.com`);
 
       // Test select parameter
-      const selectRequest = new Request(`http://localhost/rest/v1/users?select=id,email&email=eq.querytest_${timestamp}@example.com`);
-      const selectResponse = await app.fetch(selectRequest);
+      const selectRequest = new Request(`http://localhost/rest/v1/users?select=id,email&email=eq.${truncatedUniqueId}@example.com`);
+      const selectResponse = await freshApp.fetch(selectRequest);
       const selectData = await selectResponse.json();
       
       expect(selectResponse.status).toBe(200);
@@ -116,12 +137,12 @@ describe("Simple Queries Integration Tests", () => {
       if (selectData.data.length > 0) {
         expect(selectData.data[0].id).toBeDefined();
         expect(selectData.data[0].email).toBeDefined();
-        expect(selectData.data[0].name).toBeUndefined();
+        expect(selectData.data[0].first_name).toBeNull(); // Should not be included (set to null)
       }
 
       // Test get by ID with select
       const idRequest = new Request(`http://localhost/rest/v1/users/${userId}?select=id,email,age`);
-      const idResponse = await app.fetch(idRequest);
+      const idResponse = await freshApp.fetch(idRequest);
       const idData = await idResponse.json();
       
       expect(idResponse.status).toBe(200);
@@ -129,7 +150,7 @@ describe("Simple Queries Integration Tests", () => {
       expect(idData.data.id).toBe(userId);
       expect(idData.data.email).toBeDefined();
       expect(idData.data.age).toBeDefined();
-      expect(idData.data.name).toBeUndefined();
+      expect(idData.data.first_name).toBeNull(); // Should not be included (set to null)
     });
   });
 

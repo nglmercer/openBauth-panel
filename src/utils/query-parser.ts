@@ -196,8 +196,8 @@ export class PostgrestQueryParser {
         orderDirection: orderDirection || 'ASC'
       };
     } catch (error) {
-      // Return null to indicate invalid order parameter, let the caller handle it
-      return null;
+      // Re-throw the error instead of returning null to allow proper error handling
+      throw error;
     }
   }
 
