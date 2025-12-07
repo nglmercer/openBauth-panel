@@ -5,32 +5,19 @@ import { AuthClient } from "./AuthClient";
 import { PostgrestQueryBuilder } from "./PostgrestQueryBuilder";
 import type {
   User,
-  Role,
-  Permission,
   AuthContext,
-  AuthResponse,
-  LoginRequest,
-  RegisterRequest,
-  RefreshTokenRequest,
-  ChangePasswordRequest,
-  ApiResponse,
-  PaginatedResponse,
 } from "../types/auth";
-import type { FetchOptions } from "../commons/httpservice";
 import type { ApiConfig } from "../config/apiConfig";
 
 /**
  * OpenBauthPanelClient - Main API client for openBauth-panel
- * Provides a comprehensive interface for authentication and API operations
+ * Provides a Supabase-compatible interface for authentication and API operations
  */
 export class OpenBauthPanelClient extends BaseApi {
   override user: User | {};
   auth: AuthClient;
 
   constructor(config?: Partial<ApiConfig>) {
-    // Initialize user property before calling super
-    // Initialize user after super call
-
     // If custom config provided, update the default config
     if (config) {
       const updatedConfig = { ...apiConfig };
@@ -55,8 +42,6 @@ export class OpenBauthPanelClient extends BaseApi {
   from(tableName: string): PostgrestQueryBuilder {
     return new PostgrestQueryBuilder(tableName, this);
   }
-
-  // User management methods - Now handled through auth client and query builder
 
   // Utility methods - Delegated to auth client
 

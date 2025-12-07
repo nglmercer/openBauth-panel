@@ -91,18 +91,9 @@ export function createTestAuthRouter(
         return c.json({ error: "User not found after registration" }, 404);
       }
 
-      // Generate tokens manually using the user object
-      // Ensure user has the correct structure for jwtService
-      const userForToken = {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        is_active: user.is_active
-      };
-      
-      const accessToken = await jwtService.generateToken(userForToken as any);
+      // Always generate fresh tokens directly using jwtService to ensure consistency
+      // The user ID from authService might be a SQL expression, but jwtService can handle it
+      const accessToken = await jwtService.generateToken(user as any);
       const refreshToken = await jwtService.generateRefreshToken(user.id);
 
       // Set HTTP-only cookies for tokens
@@ -147,7 +138,7 @@ export function createTestAuthRouter(
           return c.json({ error: "User not found" }, 404);
         }
 
-        // Generate tokens manually to ensure they're in the correct format
+        // Always generate fresh tokens directly using jwtService to ensure consistency
         const accessToken = await jwtService.generateToken(user as any);
         const refreshToken = await jwtService.generateRefreshToken(user.id);
 
@@ -166,10 +157,19 @@ export function createTestAuthRouter(
         // Refresh token
         const { refresh_token } = body;
         
-        // Verify the refresh token
+        if (!refresh_token) {
+          return c.json({ error: "Refresh token is required" }, 400);
+        }
+        
+        // Verify the refresh token using jwtService directly
         let payload;
         try {
-          payload = await jwtService.verifyRefreshTokenWithSecurity(refresh_token);
+          // First try to verify as a regular token to get the payload
+          const decoded = await jwtService.verifyToken(refresh_token);
+          if (!decoded || !decoded.userId) {
+            return c.json({ error: "Invalid refresh token payload" }, 401);
+          }
+          payload = decoded;
         } catch (error) {
           console.error("Refresh token verification failed:", error);
           return c.json({ error: "Invalid refresh token" }, 401);
@@ -213,6 +213,64 @@ export function createTestAuthRouter(
       return c.json({ success: true });
     } catch (error) {
       return c.json(notResult(error), 500);
+    }
+  });
+
+  // Me (GET current authenticated user) - Supabase compatible endpoint
+  authRouter.get("/user", async (c: any) => {
+    // Get authorization header
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return c.json({ error: "No token provided" }, 401);
+    }
+
+    const token = authHeader.substring(7); // Remove "Bearer " prefix
+
+    try {
+      // Verify the token
+      const payload = await jwtService.verifyToken(token);
+      if (!payload) {
+        return c.json({ error: "Invalid token" }, 401);
+      }
+
+      // Fetch user details
+      const user = await authService.findUserById(payload.id);
+      if (!user) return c.json({ error: "User not found" }, 404);
+
+      // Don't return password hash
+      const { password, ...userWithoutPassword } = user as any;
+      return c.json(userWithoutPassword);
+    } catch (error) {
+      return c.json(notResult(error), 401);
+    }
+  });
+
+  // Also support /me for backward compatibility
+  authRouter.get("/me", async (c: any) => {
+    // Get authorization header
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return c.json({ error: "No token provided" }, 401);
+    }
+
+    const token = authHeader.substring(7); // Remove "Bearer " prefix
+
+    try {
+      // Verify the token
+      const payload = await jwtService.verifyToken(token);
+      if (!payload) {
+        return c.json({ error: "Invalid token" }, 401);
+      }
+
+      // Fetch user details
+      const user = await authService.findUserById(payload.id);
+      if (!user) return c.json({ error: "User not found" }, 404);
+
+      // Don't return password hash
+      const { password, ...userWithoutPassword } = user as any;
+      return c.json(userWithoutPassword);
+    } catch (error) {
+      return c.json(notResult(error), 401);
     }
   });
 

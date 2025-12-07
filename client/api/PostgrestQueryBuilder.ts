@@ -1,42 +1,47 @@
-// PostgrestQueryBuilder - Provides Supabase-like query building capabilities
-import BaseApi from "../commons/BaseApi";
+// PostgrestQueryBuilder - Fluent query builder for Supabase-compatible API
+import type { OpenBauthPanelClient } from "./OpenBauthPanelClient";
+import type { ApiResponse, PaginatedResponse } from "../types/auth";
 import type { FetchOptions } from "../commons/httpservice";
-import type { ApiResponse } from "../types/auth";
 
 /**
- * Query builder for Postgrest-compatible API operations
- * Provides a fluent interface for building queries similar to Supabase
+ * PostgrestQueryBuilder - Fluent interface for building PostgREST queries
+ * Provides a Supabase-compatible query builder for the openBauth-panel API
  */
 export class PostgrestQueryBuilder {
   private tableName: string;
-  private client: BaseApi;
-  private queryParams: Map<string, string>;
-  private selectColumns: string[];
-  private body: any;
+  private client: OpenBauthPanelClient;
+  private queryParams: URLSearchParams;
+  private selectedColumns: string[];
+  private body: any | null;
+  private operation: "select" | "insert" | "update" | "delete" | null;
 
-  constructor(tableName: string, client: BaseApi) {
+  constructor(tableName: string, client: OpenBauthPanelClient) {
     this.tableName = tableName;
     this.client = client;
-    this.queryParams = new Map();
-    this.selectColumns = [];
+    this.queryParams = new URLSearchParams();
+    this.selectedColumns = ["*"];
     this.body = null;
+    this.operation = null;
   }
 
   /**
-   * Specify which columns to select
-   * @param columns - Column names to select (default: '*')
-   * @returns This query builder for chaining
+   * Specify columns to select
+   * @param columns - Columns to select (default: "*")
+   * @returns PostgrestQueryBuilder instance for chaining
    */
-  select(columns: string = '*'): PostgrestQueryBuilder {
-    this.selectColumns = columns === '*' ? ['*'] : columns.split(',').map(col => col.trim());
+  select(columns: string = "*"): PostgrestQueryBuilder {
+    this.operation = "select";
+    this.selectedColumns = columns.split(",").map(col => col.trim());
     return this;
   }
 
+  // Filter methods
+
   /**
-   * Add an equality filter
+   * Equal filter
    * @param column - Column name
    * @param value - Value to match
-   * @returns This query builder for chaining
+   * @returns PostgrestQueryBuilder instance for chaining
    */
   eq(column: string, value: any): PostgrestQueryBuilder {
     this.queryParams.set(column, `eq.${value}`);
@@ -44,10 +49,10 @@ export class PostgrestQueryBuilder {
   }
 
   /**
-   * Add a not-equal filter
+   * Not equal filter
    * @param column - Column name
-   * @param value - Value to not match
-   * @returns This query builder for chaining
+   * @param value - Value to exclude
+   * @returns PostgrestQueryBuilder instance for chaining
    */
   neq(column: string, value: any): PostgrestQueryBuilder {
     this.queryParams.set(column, `neq.${value}`);
@@ -55,54 +60,54 @@ export class PostgrestQueryBuilder {
   }
 
   /**
-   * Add a greater-than filter
+   * Greater than filter
    * @param column - Column name
-   * @param value - Value to be greater than
-   * @returns This query builder for chaining
+   * @param value - Value to compare
+   * @returns PostgrestQueryBuilder instance for chaining
    */
-  gt(column: string, value: any): PostgrestQueryBuilder {
+  gt(column: string, value: number): PostgrestQueryBuilder {
     this.queryParams.set(column, `gt.${value}`);
     return this;
   }
 
   /**
-   * Add a greater-than-or-equal filter
+   * Greater than or equal filter
    * @param column - Column name
-   * @param value - Value to be greater than or equal to
-   * @returns This query builder for chaining
+   * @param value - Value to compare
+   * @returns PostgrestQueryBuilder instance for chaining
    */
-  gte(column: string, value: any): PostgrestQueryBuilder {
+  gte(column: string, value: number): PostgrestQueryBuilder {
     this.queryParams.set(column, `gte.${value}`);
     return this;
   }
 
   /**
-   * Add a less-than filter
+   * Less than filter
    * @param column - Column name
-   * @param value - Value to be less than
-   * @returns This query builder for chaining
+   * @param value - Value to compare
+   * @returns PostgrestQueryBuilder instance for chaining
    */
-  lt(column: string, value: any): PostgrestQueryBuilder {
+  lt(column: string, value: number): PostgrestQueryBuilder {
     this.queryParams.set(column, `lt.${value}`);
     return this;
   }
 
   /**
-   * Add a less-than-or-equal filter
+   * Less than or equal filter
    * @param column - Column name
-   * @param value - Value to be less than or equal to
-   * @returns This query builder for chaining
+   * @param value - Value to compare
+   * @returns PostgrestQueryBuilder instance for chaining
    */
-  lte(column: string, value: any): PostgrestQueryBuilder {
+  lte(column: string, value: number): PostgrestQueryBuilder {
     this.queryParams.set(column, `lte.${value}`);
     return this;
   }
 
   /**
-   * Add a like filter (pattern matching)
+   * Like filter (case-sensitive pattern matching)
    * @param column - Column name
    * @param pattern - Pattern to match (use % as wildcard)
-   * @returns This query builder for chaining
+   * @returns PostgrestQueryBuilder instance for chaining
    */
   like(column: string, pattern: string): PostgrestQueryBuilder {
     this.queryParams.set(column, `like.${pattern}`);
@@ -110,10 +115,10 @@ export class PostgrestQueryBuilder {
   }
 
   /**
-   * Add an ILIKE filter (case-insensitive pattern matching)
+   * ILIKE filter (case-insensitive pattern matching)
    * @param column - Column name
    * @param pattern - Pattern to match (use % as wildcard)
-   * @returns This query builder for chaining
+   * @returns PostgrestQueryBuilder instance for chaining
    */
   ilike(column: string, pattern: string): PostgrestQueryBuilder {
     this.queryParams.set(column, `ilike.${pattern}`);
@@ -121,169 +126,184 @@ export class PostgrestQueryBuilder {
   }
 
   /**
-   * Add an IN filter
+   * IN filter (match any value in array)
    * @param column - Column name
    * @param values - Array of values
-   * @returns This query builder for chaining
+   * @returns PostgrestQueryBuilder instance for chaining
    */
   in(column: string, values: any[]): PostgrestQueryBuilder {
-    this.queryParams.set(column, `in.(${values.join(',')})`);
+    const valuesStr = values.join(",");
+    this.queryParams.set(column, `in.(${valuesStr})`);
     return this;
   }
 
   /**
-   * Add an IS NULL filter
+   * IS filter (check for NULL or NOT NULL)
    * @param column - Column name
-   * @returns This query builder for chaining
+   * @param value - "null" or "not.null"
+   * @returns PostgrestQueryBuilder instance for chaining
    */
-  is(column: string, value: 'null' | 'not.null'): PostgrestQueryBuilder {
+  is(column: string, value: "null" | "not.null"): PostgrestQueryBuilder {
     this.queryParams.set(column, `is.${value}`);
     return this;
   }
 
   /**
-   * Add ordering
+   * Order results
    * @param column - Column name to order by
    * @param ascending - Whether to order ascending (default: true)
-   * @param nullsFirst - Whether to put nulls first (default: false)
-   * @returns This query builder for chaining
+   * @returns PostgrestQueryBuilder instance for chaining
    */
-  order(column: string, ascending: boolean = true, nullsFirst: boolean = false): PostgrestQueryBuilder {
-    const direction = ascending ? 'asc' : 'desc';
-    const nulls = nullsFirst ? 'nullsfirst' : 'nullslast';
-    this.queryParams.set('order', `${column}.${direction}.${nulls}`);
+  order(column: string, ascending: boolean = true): PostgrestQueryBuilder {
+    const direction = ascending ? "asc" : "desc";
+    this.queryParams.set("order", `${column}.${direction}`);
     return this;
   }
 
   /**
-   * Limit the number of results
+   * Limit number of results
    * @param count - Maximum number of results
-   * @returns This query builder for chaining
+   * @returns PostgrestQueryBuilder instance for chaining
    */
   limit(count: number): PostgrestQueryBuilder {
-    this.queryParams.set('limit', count.toString());
+    this.queryParams.set("limit", count.toString());
     return this;
   }
 
   /**
-   * Set the offset for pagination
+   * Offset for pagination
    * @param count - Number of results to skip
-   * @returns This query builder for chaining
+   * @returns PostgrestQueryBuilder instance for chaining
+   */
+  offset(count: number): PostgrestQueryBuilder {
+    this.queryParams.set("offset", count.toString());
+    return this;
+  }
+
+  /**
+   * Range filter (equivalent to limit + offset)
+   * @param from - Start index (inclusive)
+   * @param to - End index (inclusive)
+   * @returns PostgrestQueryBuilder instance for chaining
    */
   range(from: number, to: number): PostgrestQueryBuilder {
-    this.queryParams.set('offset', from.toString());
-    this.queryParams.set('limit', (to - from + 1).toString());
+    this.queryParams.set("offset", from.toString());
+    this.queryParams.set("limit", (to - from + 1).toString());
     return this;
   }
 
+  // Data modification methods
+
   /**
-   * Set data for insert/update operations
-   * @param data - Data to insert or update
-   * @returns This query builder for chaining
+   * Insert data
+   * @param data - Data to insert (single object or array)
+   * @returns PostgrestQueryBuilder instance for chaining
    */
-  setData(data: any): PostgrestQueryBuilder {
+  insert(data: any | any[]): PostgrestQueryBuilder {
+    this.operation = "insert";
     this.body = data;
     return this;
   }
 
   /**
-   * Execute the query and return a single result
+   * Update data
+   * @param data - Data to update
+   * @returns PostgrestQueryBuilder instance for chaining
+   */
+  update(data: any): PostgrestQueryBuilder {
+    this.operation = "update";
+    this.body = data;
+    return this;
+  }
+
+  /**
+   * Delete data
+   * @returns PostgrestQueryBuilder instance for chaining
+   */
+  delete(): PostgrestQueryBuilder {
+    this.operation = "delete";
+    return this;
+  }
+
+  // Execution methods
+
+  /**
+   * Execute query and return single result
    * @param options - Additional fetch options
-   * @returns Promise resolving to the result
+   * @returns Promise resolving to single record
    */
   async single(options?: FetchOptions): Promise<ApiResponse> {
+    if (!this.operation) {
+      this.operation = "select";
+    }
+
     const url = this.buildUrl();
-    const fetchOptions = { ...options };
     
-    // Add select parameter if specified
-    if (this.selectColumns.length > 0) {
-      fetchOptions.headers = {
-        ...fetchOptions.headers,
-        'Prefer': this.selectColumns.join(',')
-      };
+    try {
+      switch (this.operation) {
+        case "select":
+          return await this.client.get<ApiResponse>(url, options);
+        case "insert":
+          return await this.client.post<ApiResponse>(url, this.body, options);
+        case "update":
+          return await this.client.put<ApiResponse>(url, this.body, options);
+        case "delete":
+          return await this.client.delete<ApiResponse>(url, options);
+        default:
+          throw new Error("Invalid operation");
+      }
+    } finally {
+      this.reset();
     }
-
-    return this.client.get<ApiResponse>(url, fetchOptions);
   }
 
   /**
-   * Execute the query and return multiple results
+   * Execute query and return multiple results
    * @param options - Additional fetch options
-   * @returns Promise resolving to the results
+   * @returns Promise resolving to array of records
    */
-  async multiple(options?: FetchOptions): Promise<ApiResponse> {
-    return this.single(options);
-  }
-
-  /**
-   * Execute an insert operation
-   * @param data - Data to insert (optional if already set with setData)
-   * @param options - Additional fetch options
-   * @returns Promise resolving to the inserted record
-   */
-  async insert(data?: any, options?: FetchOptions): Promise<ApiResponse> {
-    const insertData = data || this.body;
-    if (!insertData) {
-      throw new Error('No data provided for insert operation');
-    }
-
-    const url = `/rest/v1/${this.tableName}`;
-    return this.client.post<ApiResponse>(url, insertData, options);
-  }
-
-  /**
-   * Execute an update operation
-   * @param data - Data to update (optional if already set with setData)
-   * @param options - Additional fetch options
-   * @returns Promise resolving to the updated records
-   */
-  async update(data?: any, options?: FetchOptions): Promise<ApiResponse> {
-    const updateData = data || this.body;
-    if (!updateData) {
-      throw new Error('No data provided for update operation');
+  async multiple(options?: FetchOptions): Promise<PaginatedResponse<any>> {
+    if (!this.operation) {
+      this.operation = "select";
     }
 
     const url = this.buildUrl();
-    return this.client.patch<ApiResponse>(url, updateData, options);
+    
+    try {
+      switch (this.operation) {
+        case "select":
+          return await this.client.get<PaginatedResponse<any>>(url, options);
+        case "insert":
+          return await this.client.post<PaginatedResponse<any>>(url, this.body, options);
+        case "update":
+          return await this.client.put<PaginatedResponse<any>>(url, this.body, options);
+        case "delete":
+          return await this.client.delete<PaginatedResponse<any>>(url, options);
+        default:
+          throw new Error("Invalid operation");
+      }
+    } finally {
+      this.reset();
+    }
   }
 
   /**
-   * Execute a delete operation
-   * @param options - Additional fetch options
-   * @returns Promise resolving to the delete response
-   */
-  async delete(options?: FetchOptions): Promise<ApiResponse> {
-    const url = this.buildUrl();
-    return this.client.delete<ApiResponse>(url, options);
-  }
-
-  /**
-   * Build the URL with query parameters
-   * @returns The constructed URL
+   * Build the final URL with query parameters
+   * @returns Complete URL string
    */
   private buildUrl(): string {
-    let url = `/rest/v1/${this.tableName}`;
-    
-    const params: string[] = [];
-    this.queryParams.forEach((value, key) => {
-      params.push(`${key}=${encodeURIComponent(value)}`);
-    });
+    const baseUrl = `/rest/v1/${this.tableName}`;
+    const queryString = this.queryParams.toString();
+    return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+  }
 
-    if (params.length > 0) {
-      url += '?' + params.join('&');
-    }
-
-    return url;
+  /**
+   * Reset the query builder state
+   */
+  private reset(): void {
+    this.queryParams = new URLSearchParams();
+    this.selectedColumns = ["*"];
+    this.body = null;
+    this.operation = null;
   }
 }
-
-// Factory function for creating a query builder
-export function createQueryBuilder(
-  tableName: string,
-  client: BaseApi
-): PostgrestQueryBuilder {
-  return new PostgrestQueryBuilder(tableName, client);
-}
-
-// Export default
-export default PostgrestQueryBuilder;
