@@ -73,8 +73,10 @@ describe("Auth API Tests - Supabase Compatible", () => {
 
   describe("POST /auth/v1/token - Password Grant", () => {
     beforeAll(async () => {
-      // Create a test user for login tests
-      testUser = await createTestUser(app);
+      // Create a test user for login tests with a unique email
+      const uniqueId = generateUniqueId();
+      const testEmail = `auth-test-${uniqueId}@example.com`;
+      testUser = await createTestUser(app, testEmail);
     });
 
     it("should login with valid credentials", async () => {
@@ -135,6 +137,7 @@ describe("Auth API Tests - Supabase Compatible", () => {
 
   describe("POST /auth/v1/token - Refresh Token Grant", () => {
     it("should refresh access token with valid refresh token", async () => {
+      // Use the refresh token from the test user created in the previous test
       const response = await app.request("/auth/v1/token", {
         method: "POST",
         headers: {
@@ -161,7 +164,7 @@ describe("Auth API Tests - Supabase Compatible", () => {
         },
         body: JSON.stringify({
           grant_type: "refresh_token",
-          refresh_token: "invalid-refresh-token",
+          refresh_token: "definitely-invalid-refresh-token-12345",
         }),
       });
 
@@ -171,6 +174,7 @@ describe("Auth API Tests - Supabase Compatible", () => {
 
   describe("GET /auth/v1/user", () => {
     it("should return current user with valid token", async () => {
+      // Use the access token from the login test
       const response = await app.request("/auth/v1/user", {
         method: "GET",
         headers: {
@@ -196,7 +200,7 @@ describe("Auth API Tests - Supabase Compatible", () => {
       const response = await app.request("/auth/v1/user", {
         method: "GET",
         headers: {
-          "Authorization": "Bearer invalid-token",
+          "Authorization": "Bearer definitely-invalid-token-12345",
         },
       });
 

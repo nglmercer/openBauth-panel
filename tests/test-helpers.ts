@@ -69,57 +69,97 @@ export async function createTestUser(app: any, email?: string, password: string 
   const userEmail = email || `test-${generateUniqueId()}@example.com`;
   const username = `user-${generateUniqueId()}`;
   
-  // Sign up - Use app.fetch() instead of app.request()
-  const signupRequest = new Request("http://localhost/auth/v1/signup", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  try {
+    // Sign up - Use app.fetch() instead of app.request()
+    const signupRequest = new Request("http://localhost/auth/v1/signup", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: userEmail,
+        password: password,
+        username: username,
+        first_name: "Test",
+        last_name: "User",
+      }),
+    });
+    const signupResponse = await app.fetch(signupRequest);
+    
+    if (signupResponse.status !== 201) {
+      const errorData = await signupResponse.json();
+      console.error('Signup failed:', errorData);
+      
+      // If it's a duplicate record error, try to login with existing user
+      if (errorData.error?.message?.includes('already exists') || errorData.error?.type === 'DATABASE_ERROR') {
+        console.log('User already exists, attempting to login instead...');
+        
+        // Try to login with existing user
+        const loginRequest = new Request("http://localhost/auth/v1/token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            grant_type: "password",
+            email: userEmail,
+            password: password,
+          }),
+        });
+        const loginResponse = await app.fetch(loginRequest);
+        
+        if (loginResponse.status === 200) {
+          const loginData = await loginResponse.json();
+          return {
+            email: userEmail,
+            username: username,
+            password: password,
+            accessToken: loginData.access_token || "test-token",
+            refreshToken: loginData.refresh_token || "test-refresh-token",
+            user: loginData.user,
+            id: loginData.user?.id,
+          };
+        }
+      }
+      
+      throw new Error(`Signup failed with status ${signupResponse.status}: ${JSON.stringify(errorData)}`);
+    }
+    
+    const signupData = await signupResponse.json();
+    
+    // Login to get tokens - Use app.fetch() instead of app.request()
+    const loginRequest = new Request("http://localhost/auth/v1/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        grant_type: "password",
+        email: userEmail,
+        password: password,
+      }),
+    });
+    const loginResponse = await app.fetch(loginRequest);
+    
+    if (loginResponse.status !== 200) {
+      throw new Error(`Login failed with status ${loginResponse.status}`);
+    }
+    
+    const loginData = await loginResponse.json();
+    
+    return {
       email: userEmail,
-      password: password,
       username: username,
-      first_name: "Test",
-      last_name: "User",
-    }),
-  });
-  const signupResponse = await app.fetch(signupRequest);
-  
-  if (signupResponse.status !== 201) {
-    const errorData = await signupResponse.json();
-    throw new Error(`Signup failed with status ${signupResponse.status}: ${JSON.stringify(errorData)}`);
-  }
-  
-  const signupData = await signupResponse.json();
-  
-  // Login to get tokens - Use app.fetch() instead of app.request()
-  const loginRequest = new Request("http://localhost/auth/v1/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      grant_type: "password",
-      email: userEmail,
       password: password,
-    }),
-  });
-  const loginResponse = await app.fetch(loginRequest);
-  
-  if (loginResponse.status !== 200) {
-    throw new Error(`Login failed with status ${loginResponse.status}`);
+      accessToken: loginData.access_token || "test-token",
+      refreshToken: loginData.refresh_token || "test-refresh-token",
+      user: loginData.user,
+      id: signupData.user?.id || loginData.user?.id,
+    };
+  } catch (error) {
+    console.error('Error in createTestUser:', error);
+    throw error;
   }
-  
-  const loginData = await loginResponse.json();
-  
-  return {
-    email: userEmail,
-    username: username,
-    accessToken: "test-token", // Use simple test token instead of JWT
-    refreshToken: "test-refresh-token", // Use simple test refresh token
-    user: loginData.user,
-    id: signupData.user?.id || loginData.user?.id, // Get ID from signup or login response
-  };
 }
 
 /**
