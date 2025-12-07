@@ -286,7 +286,7 @@ export function createTestRestApiRouter(testDb: any, dbInitializer: DatabaseInit
       const schemas = getDefaultSchemas();
       const tables = schemas.map((s) => ({
         name: s.tableName,
-        columns: s.columns.length,
+        columns: s.columns,
       }));
       return c.json({ tables });
     } catch (error) {
