@@ -123,21 +123,30 @@ describe("Fase 1 - Verificación de Rutas Supabase", () => {
     });
 
     it("GET /auth/v1/user - should return current user with valid token", async () => {
-      const timestamp = Date.now();
+      const uniqueId = generateUniqueId();
+      const email = `test-user-${uniqueId}@example.com`;
+      const username = `testuser-${uniqueId}`;
+      
       // Registrar usuario
-      await app.request("/auth/v1/signup", {
+      const signupResponse = await app.request("/auth/v1/signup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: `me-${timestamp}@example.com`,
+          email: email,
           password: "password123",
-          username: `meuser-${timestamp}`,
-          first_name: "Me",
-          last_name: "Test",
+          username: username,
+          first_name: "Test",
+          last_name: "User",
         }),
       });
+
+      if (signupResponse.status !== 201) {
+        const error = await signupResponse.json();
+        console.error("Signup failed:", error);
+      }
+      expect(signupResponse.status).toBe(201);
 
       // Login para obtener token
       const loginResponse = await app.request("/auth/v1/token", {
@@ -147,11 +156,22 @@ describe("Fase 1 - Verificación de Rutas Supabase", () => {
         },
         body: JSON.stringify({
           grant_type: "password",
-          email: `me-${timestamp}@example.com`,
+          email: email,
           password: "password123",
         }),
       });
+      
+      if (loginResponse.status !== 200) {
+        const error = await loginResponse.json();
+        console.error("Login failed:", error);
+      }
+      expect(loginResponse.status).toBe(200);
+      
       const loginData = await loginResponse.json();
+      
+      // Verificar que el token existe
+      expect(loginData.access_token).toBeDefined();
+      expect(loginData.access_token.length).toBeGreaterThan(0);
 
       // Obtener usuario actual
       const response = await app.request("/auth/v1/user", {
@@ -163,8 +183,8 @@ describe("Fase 1 - Verificación de Rutas Supabase", () => {
 
       expect(response.status).toBe(200);
       const data = await response.json();
-      expect(data.email).toBe(`me-${timestamp}@example.com`);
-      expect(data.username).toBe(`meuser-${timestamp}`);
+      expect(data.email).toBe(email);
+      expect(data.username).toBe(username);
     });
 
     it("POST /auth/v1/logout - should logout successfully", async () => {

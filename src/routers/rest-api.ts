@@ -14,6 +14,7 @@ import {
   getSchemas,
   getTableRelations,
   getRelatedData,
+  ExtendedBaseController,
 } from "../database/base-controller";
 import { ZodSchemaGenerator } from "../validator/schema-generator";
 import { authMiddleware, requirePermissions } from "../middleware";
@@ -163,32 +164,15 @@ for (const schema of schemas) {
     // In a production environment, you would want to enable this
     // requirePermissions([`${tableName}:list`]),
     try {
-      const limit = parseInt(c.req.query("limit") || "50");
-      const offset = parseInt(c.req.query("offset") || "0");
-      const orderBy = c.req.query("orderBy") || "id";
-      const orderDirection =
-        (c.req.query("orderDirection") as "ASC" | "DESC") || undefined;
       const includeRelations = c.req.query("includeRelations") === "true";
 
-      if (
-        orderDirection &&
-        orderDirection !== "ASC" &&
-        orderDirection !== "DESC"
-      ) {
-        return c.json({ error: "Invalid orderDirection" }, 400);
-      }
-
-      const controller = new BaseController(tableName, {
+      // Usar ExtendedBaseController con query string completa
+      const controller = new ExtendedBaseController(tableName, {
         database: db,
         isSQLite: true,
       });
 
-      const result = await controller.findAll({
-        limit,
-        offset,
-        orderBy,
-        orderDirection,
-      });
+      const result = await controller.findAllWithQuery(c.req.url.split('?')[1] || '');
 
       // If relations are requested, fetch them for each record
       if (includeRelations && result.success && result.data) {
@@ -230,12 +214,13 @@ for (const schema of schemas) {
       const id = c.req.param("id");
       const includeRelations = c.req.query("includeRelations") === "true";
 
-      const controller = new BaseController(tableName, {
+      // Usar ExtendedBaseController con query string para soporte de select
+      const controller = new ExtendedBaseController(tableName, {
         database: db,
         isSQLite: true,
       });
 
-      const result = await controller.findById(id);
+      const result = await controller.findByIdWithQuery(id, c.req.url.split('?')[1]);
 
       if (!result.success || !result.data) {
         return c.json({ error: "Record not found" }, 404);
