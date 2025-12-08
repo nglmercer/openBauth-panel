@@ -3,6 +3,7 @@ import BaseApi from "../commons/BaseApi";
 import apiConfig from "../config/apiConfig";
 import { AuthClient } from "./AuthClient";
 import { PostgrestQueryBuilder } from "./PostgrestQueryBuilder";
+import { RealtimeClient } from "./RealtimeClient";
 import type {
   User,
   AuthContext,
@@ -16,6 +17,8 @@ import type { ApiConfig } from "../config/apiConfig";
 export class OpenBauthPanelClient extends BaseApi {
   override user: User | {};
   auth: AuthClient;
+  realtime: RealtimeClient;
+  private clientConfig: ApiConfig;
 
   constructor(config?: Partial<ApiConfig>) {
     // If custom config provided, update the default config
@@ -23,8 +26,10 @@ export class OpenBauthPanelClient extends BaseApi {
       const updatedConfig = { ...apiConfig };
       Object.assign(updatedConfig, config);
       super(updatedConfig);
+      this.clientConfig = updatedConfig;
     } else {
       super(apiConfig);
+      this.clientConfig = apiConfig;
     }
 
     // Initialize user after super call
@@ -32,6 +37,9 @@ export class OpenBauthPanelClient extends BaseApi {
     
     // Initialize auth client
     this.auth = new AuthClient(config);
+    
+    // Initialize realtime client with same config
+    this.realtime = new RealtimeClient(this.clientConfig);
   }
 
   /**
@@ -91,6 +99,30 @@ export class OpenBauthPanelClient extends BaseApi {
    */
   clearAuth(): void {
     this.auth.clearSession();
+  }
+
+  /**
+   * Connect to realtime WebSocket server
+   * @returns Promise that resolves when connected
+   */
+  connectRealtime(): Promise<void> {
+    return this.realtime.connect();
+  }
+
+  /**
+   * Disconnect from realtime WebSocket server
+   */
+  disconnectRealtime(): void {
+    this.realtime.disconnect();
+  }
+
+  /**
+   * Create a realtime channel for subscriptions
+   * @param topic - Channel topic
+   * @returns RealtimeChannelBuilder instance
+   */
+  channel(topic: string) {
+    return this.realtime.channel(topic);
   }
 }
 
