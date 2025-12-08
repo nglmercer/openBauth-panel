@@ -233,25 +233,38 @@ export class PostgrestQueryBuilder {
    * @returns Promise resolving to single record
    */
   async single(options?: FetchOptions): Promise<ApiResponse> {
-    if (!this.operation) {
-      this.operation = "select";
-    }
-
-    const url = this.buildUrl();
-    
     try {
+      this.validateOperation();
+      const url = this.buildUrl();
+      
+      let result: ApiResponse;
       switch (this.operation) {
         case "select":
-          return await this.client.get<ApiResponse>(url, options);
+          result = await this.client.get<ApiResponse>(url, options);
+          break;
         case "insert":
-          return await this.client.post<ApiResponse>(url, this.body, options);
+          result = await this.client.post<ApiResponse>(url, this.body, options);
+          break;
         case "update":
-          return await this.client.put<ApiResponse>(url, this.body, options);
+          result = await this.client.put<ApiResponse>(url, this.body, options);
+          break;
         case "delete":
-          return await this.client.delete<ApiResponse>(url, options);
+          result = await this.client.delete<ApiResponse>(url, options);
+          break;
         default:
           throw new Error("Invalid operation");
       }
+
+      // Handle foreign key constraint violations
+      if (result && typeof result === 'object' && 'error' in result) {
+        result.error = this.handleForeignKeyError(result.error);
+      }
+
+      return result;
+    } catch (error) {
+      // Handle network or other errors
+      const enhancedError = this.handleForeignKeyError(error);
+      throw enhancedError;
     } finally {
       this.reset();
     }
@@ -263,25 +276,38 @@ export class PostgrestQueryBuilder {
    * @returns Promise resolving to array of records
    */
   async multiple(options?: FetchOptions): Promise<PaginatedResponse<any>> {
-    if (!this.operation) {
-      this.operation = "select";
-    }
-
-    const url = this.buildUrl();
-    
     try {
+      this.validateOperation();
+      const url = this.buildUrl();
+      
+      let result: PaginatedResponse<any>;
       switch (this.operation) {
         case "select":
-          return await this.client.get<PaginatedResponse<any>>(url, options);
+          result = await this.client.get<PaginatedResponse<any>>(url, options);
+          break;
         case "insert":
-          return await this.client.post<PaginatedResponse<any>>(url, this.body, options);
+          result = await this.client.post<PaginatedResponse<any>>(url, this.body, options);
+          break;
         case "update":
-          return await this.client.put<PaginatedResponse<any>>(url, this.body, options);
+          result = await this.client.put<PaginatedResponse<any>>(url, this.body, options);
+          break;
         case "delete":
-          return await this.client.delete<PaginatedResponse<any>>(url, options);
+          result = await this.client.delete<PaginatedResponse<any>>(url, options);
+          break;
         default:
           throw new Error("Invalid operation");
       }
+
+      // Handle foreign key constraint violations
+      if (result && typeof result === 'object' && 'error' in result) {
+        result.error = this.handleForeignKeyError(result.error);
+      }
+
+      return result;
+    } catch (error) {
+      // Handle network or other errors
+      const enhancedError = this.handleForeignKeyError(error);
+      throw enhancedError;
     } finally {
       this.reset();
     }
@@ -292,9 +318,167 @@ export class PostgrestQueryBuilder {
    * @returns Complete URL string
    */
   private buildUrl(): string {
-    const baseUrl = `/rest/v1/${this.tableName}`;
+    let baseUrl = `/rest/v1/${this.tableName}`;
+
+    // Special handling for DELETE and UPDATE operations with ID filter
+    // This converts PostgREST-style filters to REST-style URLs
+    if (this.operation === "delete" || this.operation === "update") {
+      const idFilter = this.queryParams.get("id");
+      if (idFilter && idFilter.startsWith("eq.")) {
+        const id = idFilter.substring(3);
+        baseUrl = `${baseUrl}/${id}`;
+        this.queryParams.delete("id");
+      }
+    }
+
     const queryString = this.queryParams.toString();
     return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+  }
+
+  /**
+   * Enhanced error handling for foreign key constraint violations
+   * @param error - The error object
+   * @returns Enhanced error with helpful message
+   */
+  private handleForeignKeyError(error: any): any {
+    if (error?.message?.includes('Foreign key constraint') ||
+        error?.error?.includes('Foreign key constraint') ||
+        error?.details?.includes('foreign key')) {
+      
+      const tableName = this.tableName;
+      const suggestions = this.getCascadeSuggestions(tableName);
+      
+      return {
+        ...error,
+        message: `Cannot delete ${tableName} because it has related records in other tables.`,
+        suggestion: `Try deleting related records first: ${suggestions.join(', ')}`,
+        code: 'FOREIGN_KEY_VIOLATION',
+        help: 'Use cascade delete or remove dependencies manually'
+      };
+    }
+    return error;
+  }
+
+  /**
+   * Get cascade deletion suggestions for a table
+   * @param tableName - Name of the table
+   * @returns Array of related table names
+   */
+  private getCascadeSuggestions(tableName: string): string[] {
+    const commonRelations: Record<string, string[]> = {
+      'users': ['user_roles', 'sessions', 'refresh_tokens', 'user_devices', 'mfa_configurations'],
+      'roles': ['user_roles', 'role_permissions'],
+      'permissions': ['role_permissions'],
+      'posts': ['comments', 'post_tags'],
+      'categories': ['posts']
+    };
+    
+    return commonRelations[tableName] || ['related_records'];
+  }
+
+  /**
+   * Validate operation parameters before execution
+   * @throws Error if validation fails
+   */
+  private validateOperation(): void {
+    if (!this.operation) {
+      throw new Error('No operation specified. Use select(), insert(), update(), or delete()');
+    }
+
+    if ((this.operation === 'update' || this.operation === 'delete') && !this.hasIdFilter()) {
+      console.warn(`${this.operation.toUpperCase()} operation without ID filter may affect multiple records`);
+    }
+
+    if (this.operation === 'insert' && !this.body) {
+      throw new Error('Insert operation requires data');
+    }
+
+    if ((this.operation === 'update' || this.operation === 'insert') && !this.body) {
+      throw new Error(`${this.operation} operation requires data`);
+    }
+  }
+
+  /**
+   * Check if there's an ID filter for safe operations
+   * @returns true if ID filter exists
+   */
+  private hasIdFilter(): boolean {
+    const idFilter = this.queryParams.get("id");
+    return !!(idFilter && idFilter.startsWith("eq."));
+  }
+
+  /**
+   * Perform cascade delete for users table
+   * @param userId - User ID to cascade delete
+   * @returns Promise with cascade results
+   */
+  async cascadeDelete(userId: string): Promise<{ success: boolean; results: any[]; error?: string }> {
+    if (this.tableName !== 'users') {
+      throw new Error('Cascade delete is only supported for users table');
+    }
+
+    const results: any[] = [];
+    const relatedTables = ['user_roles', 'sessions', 'refresh_tokens', 'user_devices', 'mfa_configurations'];
+    
+    try {
+      // Delete from related tables first
+      for (const table of relatedTables) {
+        try {
+          const result = await this.client.delete<PaginatedResponse<any>>(`/rest/v1/${table}?user_id=eq.${userId}`);
+          results.push({ table, success: true, deleted: result.data?.items?.length || 0 });
+        } catch (error) {
+          results.push({ table, success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+        }
+      }
+
+      // Finally delete the user
+      const userResult = await this.client.delete<ApiResponse>(`/rest/v1/users/${userId}`);
+      results.push({ table: 'users', success: true, data: userResult });
+
+      return { success: true, results };
+    } catch (error) {
+      return {
+        success: false,
+        results,
+        error: error instanceof Error ? error.message : 'Cascade delete failed'
+      };
+    }
+  }
+
+  /**
+   * Safe delete with automatic cascade for users
+   * @returns Promise with delete result
+   */
+  async safeDelete(): Promise<ApiResponse> {
+    if (this.tableName !== 'users' || !this.hasIdFilter()) {
+      return this.single();
+    }
+
+    const userId = this.queryParams.get("id")!.substring(3);
+    
+    try {
+      // Try normal delete first
+      const result = await this.single();
+      
+      if (result && typeof result === 'object' && 'error' in result &&
+          result.error && typeof result.error === 'object' && 'message' in result.error &&
+          (result.error as any).message?.includes('Foreign key constraint')) {
+        
+        // If foreign key error, try cascade delete
+        console.log('Attempting cascade delete for user:', userId);
+        const cascadeResult = await this.cascadeDelete(userId);
+        
+        if (cascadeResult.success) {
+          return { success: true, message: 'User and related records deleted successfully' };
+        } else {
+          throw new Error(`Cascade delete failed: ${cascadeResult.error}`);
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      throw this.handleForeignKeyError(error);
+    }
   }
 
   /**
