@@ -117,6 +117,13 @@ export class OpenBauthPanelClient extends BaseApi {
   }
 
   /**
+   * Disconnect from realtime WebSocket server and clear all subscriptions
+   */
+  disconnectRealtimeAndClear(): void {
+    this.realtime.disconnectAndClear();
+  }
+
+  /**
    * Create a realtime channel for subscriptions
    * @param topic - Channel topic
    * @returns RealtimeChannelBuilder instance

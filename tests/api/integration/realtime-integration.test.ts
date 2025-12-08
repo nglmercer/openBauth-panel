@@ -29,13 +29,15 @@ describe("Realtime Integration Tests", () => {
       update: function() { console.log('API config updated'); }
     });
 
-    await expect(client.connectRealtime()).resolves.not.toThrow();
+    await client.connectRealtime();
+    // If we get here, connection was successful
+    expect(true).toBe(true);
     
     const state = client.realtime.getConnectionState();
     expect(state.isConnected).toBe(true);
     expect(state.channels).toBe(0);
 
-    client.disconnectRealtime();
+    client.disconnectRealtimeAndClear();
   });
 
   test("should handle connection failure gracefully", async () => {
@@ -51,6 +53,7 @@ describe("Realtime Integration Tests", () => {
     
     const state = client.realtime.getConnectionState();
     expect(state.isConnected).toBe(false);
+    client.disconnectRealtimeAndClear();
   });
 
   test("should create and subscribe to a channel", async () => {
@@ -103,7 +106,7 @@ describe("Realtime Integration Tests", () => {
     expect(receivedData.table).toBe('users');
     expect(receivedData.data).toEqual({ id: 1, name: 'Test User' });
 
-    client.disconnectRealtime();
+    client.disconnectRealtimeAndClear();
   });
 
   test("should handle multiple subscriptions to different tables", async () => {
@@ -178,7 +181,7 @@ describe("Realtime Integration Tests", () => {
     expect(rolesData.event).toBe('INSERT');
     expect(rolesData.table).toBe('roles');
 
-    client.disconnectRealtime();
+    client.disconnectRealtimeAndClear();
   });
 
   test("should handle channel unsubscription", async () => {
@@ -225,7 +228,7 @@ describe("Realtime Integration Tests", () => {
     // Should not receive data after unsubscribe
     expect(receivedData).toBeNull();
 
-    client.disconnectRealtime();
+    client.disconnectRealtimeAndClear();
   });
 
   test("should handle reconnection after disconnection", async () => {
@@ -241,11 +244,13 @@ describe("Realtime Integration Tests", () => {
     
     let receivedData: any = null;
     
-    client
-      .channel('reconnect-test')
-      .on('postgres_changes', 
+    // Create subscription - use db-changes channel which is what the server notifies
+    const subscription = client
+      .channel('db-changes')
+      .on('postgres_changes',
         { event: '*', schema: 'public', table: 'users' },
         (payload) => {
+          console.log('Received data:', payload);
           receivedData = payload;
         }
       )
@@ -253,19 +258,40 @@ describe("Realtime Integration Tests", () => {
     
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Disconnect
+    // Test initial subscription works - use the same channel name as the subscription
+    await fetch('http://localhost:3001/realtime/v1/test-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        table: 'users',
+        event: 'INSERT',
+        data: { id: 1, name: 'Initial User' }
+      })
+    });
+    
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(receivedData).not.toBeNull();
+    expect(receivedData.data.name).toBe('Initial User');
+    
+    // Disconnect (but don't clear subscriptions)
     client.disconnectRealtime();
     
     const state1 = client.realtime.getConnectionState();
     expect(state1.isConnected).toBe(false);
     
+    // Reset receivedData for reconnection test
+    receivedData = null;
+    
     // Reconnect
     await client.connectRealtime();
+    
+    // Wait for reconnection and resubscription
+    await new Promise(resolve => setTimeout(resolve, 300));
     
     const state2 = client.realtime.getConnectionState();
     expect(state2.isConnected).toBe(true);
     
-    // Test that subscription still works after reconnection
+    // Test that subscription works after reconnection - use the same channel name
     await fetch('http://localhost:3001/realtime/v1/test-notify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -276,12 +302,13 @@ describe("Realtime Integration Tests", () => {
       })
     });
     
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait longer for message to be processed after reconnection
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     expect(receivedData).not.toBeNull();
     expect(receivedData.data.name).toBe('Reconnected User');
 
-    client.disconnectRealtime();
+    client.disconnectRealtimeAndClear();
   });
 
   test("should handle health check endpoint", async () => {

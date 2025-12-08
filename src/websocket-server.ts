@@ -12,6 +12,9 @@ export interface WebSocketData {
   createdAt: number;
 }
 
+// Map to track WebSocket connections and their client IDs
+const websocketClients = new Map<string, ServerWebSocket<WebSocketData>>();
+
 /**
  * Create WebSocket server for realtime functionality
  */
@@ -29,9 +32,6 @@ export function createRealtimeWebSocketServer(port: number = 3000) {
             data: {
               clientId: `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               createdAt: Date.now(),
-            },
-            headers: {
-              "Sec-WebSocket-Protocol": "realtime",
             },
           });
 
@@ -77,9 +77,44 @@ export function createRealtimeWebSocketServer(port: number = 3000) {
         const data = ws.data;
         console.log(`WebSocket connection opened: ${data.clientId}`);
         
-        // Convert ServerWebSocket to standard WebSocket for our realtime server
-        const standardWebSocket = ws as any;
-        realtimeServer.handleConnection(standardWebSocket, new Request("http://localhost:3000/realtime/v1/websocket"));
+        // Store the WebSocket connection
+        websocketClients.set(data.clientId, ws);
+        
+        // Create a WebSocket-like interface for our realtime server
+        const webSocketInterface = {
+          send: (message: string) => {
+            if (ws.readyState === 1) { // WebSocket.OPEN
+              ws.send(message);
+            }
+          },
+          close: () => {
+            ws.close();
+          },
+          readyState: 1, // WebSocket.OPEN
+          onmessage: null as ((event: any) => void) | null,
+          onclose: null as (() => void) | null,
+          onerror: null as ((event: any) => void) | null,
+        };
+        
+        // Handle the initial connection - pass the clientId as part of the request
+        const requestWithClientId = new Request("http://localhost:3000/realtime/v1/websocket", {
+          headers: {
+            'x-client-id': data.clientId
+          }
+        });
+        realtimeServer.handleConnection(webSocketInterface as any, requestWithClientId);
+        
+        // Set up event handlers on the interface
+        webSocketInterface.onclose = () => {
+          realtimeServer.handleDisconnect(data.clientId);
+          websocketClients.delete(data.clientId);
+        };
+        
+        webSocketInterface.onerror = (event: any) => {
+          console.error(`WebSocket error for client ${data.clientId}:`, event);
+          realtimeServer.handleDisconnect(data.clientId);
+          websocketClients.delete(data.clientId);
+        };
       },
 
       message: (ws: ServerWebSocket<WebSocketData>, message: string | Buffer) => {
@@ -89,9 +124,7 @@ export function createRealtimeWebSocketServer(port: number = 3000) {
         console.log(`WebSocket message from ${data.clientId}:`, messageStr);
         
         // Handle the message through our realtime server
-        // This is a simplified approach - in production you'd want better integration
-        const standardWebSocket = ws as any;
-        realtimeServer.handleConnection(standardWebSocket, new Request("http://localhost:3000/realtime/v1/websocket"));
+        realtimeServer.handleMessage(data.clientId, messageStr);
       },
 
       close: (ws: ServerWebSocket<WebSocketData>) => {
@@ -99,7 +132,8 @@ export function createRealtimeWebSocketServer(port: number = 3000) {
         console.log(`WebSocket connection closed: ${data.clientId}`);
         
         // Handle disconnection
-        // The realtime server will handle cleanup when the WebSocket closes
+        realtimeServer.handleDisconnect(data.clientId);
+        websocketClients.delete(data.clientId);
       },
 
       drain: (ws: ServerWebSocket<WebSocketData>) => {

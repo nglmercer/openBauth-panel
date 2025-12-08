@@ -19,7 +19,7 @@ interface WebSocketClient {
 }
 
 interface RealtimeMessage {
-  type: 'phx_join' | 'phx_leave' | 'heartbeat' | 'presence' | 'broadcast';
+  type: 'phx_join' | 'phx_leave' | 'heartbeat' | 'presence' | 'broadcast' | 'postgres_changes' | 'phx_reply';
   topic: string;
   payload: any;
   ref?: string;
@@ -38,11 +38,15 @@ export class RealtimeServer {
    * Maneja nuevas conexiones WebSocket
    */
   handleConnection(ws: WebSocket, request: Request) {
-    const clientId = this.generateClientId();
+    // Get clientId from header if provided (from WebSocket server), otherwise generate one
+    const clientId = request.headers.get('x-client-id') || this.generateClientId();
+    
+    // Check if this client already exists (reconnection)
+    const existingClient = this.clients.get(clientId);
     const client: WebSocketClient = {
       ws,
       id: clientId,
-      subscriptions: new Set(),
+      subscriptions: existingClient ? existingClient.subscriptions : new Set(),
     };
 
     this.clients.set(clientId, client);
@@ -68,7 +72,7 @@ export class RealtimeServer {
   /**
    * Maneja mensajes entrantes del cliente
    */
-  private handleMessage(clientId: string, message: string) {
+  public handleMessage(clientId: string, message: string) {
     try {
       const msg: RealtimeMessage = JSON.parse(message);
       const client = this.clients.get(clientId);
@@ -171,7 +175,7 @@ export class RealtimeServer {
   /**
    * Maneja desconexiones
    */
-  private handleDisconnect(clientId: string) {
+  public handleDisconnect(clientId: string) {
     const client = this.clients.get(clientId);
     if (!client) return;
 
@@ -208,9 +212,9 @@ export class RealtimeServer {
     if (!topicSubs) return;
 
     const message = {
-      type: 'broadcast',
+      type: event, // Use the event type directly (e.g., 'postgres_changes')
       topic,
-      payload: { type: event, data }
+      payload: data
     };
 
     topicSubs.forEach(clientId => {
@@ -224,23 +228,22 @@ export class RealtimeServer {
    * Notifica cambios en la base de datos a los suscriptores
    */
   notifyDatabaseChange(table: string, event: 'INSERT' | 'UPDATE' | 'DELETE', data: any) {
-    const topic = `realtime:${table}`;
-    
-    // Notify specific table subscribers
-    this.broadcastToTopic(topic, 'postgres_changes', {
+    const payload = {
       event,
       table,
       data,
       timestamp: new Date().toISOString()
-    });
+    };
+    
+    // Notify specific table subscribers - use the channel topic format from client
+    this.broadcastToTopic('db-changes', 'postgres_changes', payload);
+
+    // Also notify using the old format for compatibility
+    const topic = `realtime:${table}`;
+    this.broadcastToTopic(topic, 'postgres_changes', payload);
 
     // Notify wildcard subscribers
-    this.broadcastToTopic('realtime:*', 'postgres_changes', {
-      event,
-      table,
-      data,
-      timestamp: new Date().toISOString()
-    });
+    this.broadcastToTopic('realtime:*', 'postgres_changes', payload);
   }
 
   /**

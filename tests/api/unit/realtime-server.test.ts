@@ -193,13 +193,13 @@ describe("RealtimeServer", () => {
     expect(mockWs1.sentMessages.length).toBeGreaterThan(0);
     expect(mockWs2.sentMessages.length).toBeGreaterThan(0);
     
-    const broadcast1 = mockWs1.sentMessages.find(msg => msg.type === 'broadcast');
-    const broadcast2 = mockWs2.sentMessages.find(msg => msg.type === 'broadcast');
+    const broadcast1 = mockWs1.sentMessages.find(msg => msg.type === 'test_event');
+    const broadcast2 = mockWs2.sentMessages.find(msg => msg.type === 'test_event');
     
     expect(broadcast1).toBeDefined();
     expect(broadcast2).toBeDefined();
-    expect(broadcast1.payload.data).toEqual({ data: 'test' });
-    expect(broadcast2.payload.data).toEqual({ data: 'test' });
+    expect(broadcast1.payload).toEqual({ data: 'test' });
+    expect(broadcast2.payload).toEqual({ data: 'test' });
   });
 
   test("should notify database changes", () => {
@@ -222,14 +222,14 @@ describe("RealtimeServer", () => {
     realtimeServer.notifyDatabaseChange('users', 'INSERT', { id: 1, name: 'Test User' });
     
     // Should receive postgres_changes notification
-    const postgresMessage = mockWs.sentMessages.find(msg => 
-      msg.payload.type === 'postgres_changes'
+    const postgresMessage = mockWs.sentMessages.find(msg =>
+      msg.type === 'postgres_changes'
     );
     
     expect(postgresMessage).toBeDefined();
-    expect(postgresMessage.payload.data.event).toBe('INSERT');
-    expect(postgresMessage.payload.data.table).toBe('users');
-    expect(postgresMessage.payload.data.data).toEqual({ id: 1, name: 'Test User' });
+    expect(postgresMessage.payload.event).toBe('INSERT');
+    expect(postgresMessage.payload.table).toBe('users');
+    expect(postgresMessage.payload.data).toEqual({ id: 1, name: 'Test User' });
   });
 
   test("should handle invalid JSON messages gracefully", () => {

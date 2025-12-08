@@ -57,7 +57,7 @@ export class RealtimeClient {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private reconnectDelay: number = 1000;
-  private heartbeatInterval: number | null = null;
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private isConnected: boolean = false;
   private config: ApiConfig;
 
@@ -86,32 +86,48 @@ export class RealtimeClient {
 
       console.log(`Connecting to WebSocket: ${websocketUrl}`);
 
-      this.ws = new WebSocket(websocketUrl, ['realtime']);
+      try {
+        this.ws = new WebSocket(websocketUrl);
 
-      this.ws.onopen = () => {
-        console.log('WebSocket connected');
-        this.isConnected = true;
-        this.reconnectAttempts = 0;
-        this.startHeartbeat();
-        this.resubscribeToChannels();
-        resolve();
-      };
+        this.ws.onopen = () => {
+          console.log('WebSocket connected');
+          this.isConnected = true;
+          this.reconnectAttempts = 0;
+          this.startHeartbeat();
+          this.resubscribeToChannels();
+          resolve();
+        };
 
-      this.ws.onmessage = (event) => {
-        this.handleMessage(event.data);
-      };
+        this.ws.onmessage = (event) => {
+          this.handleMessage(event.data);
+        };
 
-      this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        reject(error);
-      };
+        this.ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          this.isConnected = false;
+          reject(new Error('WebSocket connection failed'));
+        };
 
-      this.ws.onclose = () => {
-        console.log('WebSocket disconnected');
+        this.ws.onclose = (event) => {
+          console.log(`WebSocket disconnected: ${event.code} - ${event.reason}`);
+          this.isConnected = false;
+          this.stopHeartbeat();
+          
+          // Only attempt reconnect if this was an abnormal closure and we're not manually disconnecting
+          if (event.code !== 1000 && event.code !== 1001) {
+            this.attemptReconnect();
+          }
+          
+          // Reject the promise if we haven't connected yet
+          if (!this.isConnected && this.reconnectAttempts === 0) {
+            reject(new Error('WebSocket connection closed before establishing connection'));
+          }
+        };
+      } catch (error) {
+        console.error('Failed to create WebSocket:', error);
         this.isConnected = false;
-        this.stopHeartbeat();
-        this.attemptReconnect();
-      };
+        reject(new Error('Failed to create WebSocket connection'));
+      }
     });
   }
 
@@ -130,8 +146,19 @@ export class RealtimeClient {
     }
 
     this.isConnected = false;
+    // Don't clear channels and handlers on disconnect to preserve subscriptions for reconnection
+    // this.channels.clear();
+    // this.messageHandlers.clear();
+  }
+
+  /**
+   * Desconecta completamente y limpia todas las suscripciones
+   */
+  public disconnectAndClear() {
+    this.disconnect();
     this.channels.clear();
     this.messageHandlers.clear();
+    this.reconnectAttempts = 0;
   }
 
   /**
@@ -158,6 +185,10 @@ export class RealtimeClient {
           break;
         case 'postgres_changes':
           this.handlePostgresChanges(message);
+          break;
+        case 'heartbeat':
+          // Handle heartbeat from server - just acknowledge it
+          console.log('Received heartbeat from server');
           break;
         default:
           console.log(`Unknown message type: ${message.type}`);
@@ -203,15 +234,22 @@ export class RealtimeClient {
     // Notify all subscribers for this table
     const table = payload.table;
     if (table) {
-      const handler = this.messageHandlers.get(`${topic}:postgres_changes:${table}`);
-      if (handler) {
-        handler(payload);
+      // Try specific table handler first
+      const tableHandler = this.messageHandlers.get(`${topic}:postgres_changes:${table}`);
+      if (tableHandler) {
+        tableHandler(payload);
       }
       
       // Also notify wildcard subscribers
       const wildcardHandler = this.messageHandlers.get(`${topic}:postgres_changes:*`);
       if (wildcardHandler) {
         wildcardHandler(payload);
+      }
+      
+      // Also check for handlers registered without specific table
+      const generalHandler = this.messageHandlers.get(`${topic}:postgres_changes`);
+      if (generalHandler) {
+        generalHandler(payload);
       }
     }
   }
@@ -231,7 +269,7 @@ export class RealtimeClient {
    * Inicia heartbeat para mantener la conexión viva
    */
   private startHeartbeat() {
-    this.heartbeatInterval = window.setInterval(() => {
+    this.heartbeatInterval = setInterval(() => {
       this.send({
         type: 'heartbeat',
         topic: 'phoenix',
@@ -390,8 +428,15 @@ export class RealtimeChannelBuilder {
       callback
     });
 
-    // Register the handler
-    const handlerKey = `${this.topic}:${event}:${filter.table || '*'}`;
+    // Register the handler - try multiple key formats for compatibility
+    const handlerKeys = [
+      `${this.topic}:${event}:${filter.table}`,
+      `${this.topic}:${event}:*`,
+      `${this.topic}:${event}`
+    ];
+    
+    // Register with the most specific key that makes sense
+    const handlerKey = filter.table ? `${this.topic}:${event}:${filter.table}` : `${this.topic}:${event}:*`;
     this.client.registerHandler(handlerKey, callback);
 
     return this;
@@ -434,6 +479,7 @@ export class RealtimeChannelBuilder {
         this.client.joinChannel(this.topic, channel);
       }).catch((error) => {
         console.error('Failed to connect to realtime server:', error);
+        // Still return subscription even if connection fails
       });
     } else {
       this.client.joinChannel(this.topic, channel);
