@@ -7,7 +7,7 @@ import {
   getSchemas,
   getDefaultSchemas,
 } from "../../../src/database/base-controller";
-import { db, dbInitializer } from "../../../src/db";
+import { db } from "../../../src/db";
 
 describe("Database Schema Extractor", () => {
   let testDb: Database;

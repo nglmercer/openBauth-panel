@@ -63,11 +63,12 @@ genericData.use("/:tableName/*", async (c, next) => {
     const userId = auth?.user?.id || 'anonymous';
     await services.auditService.logApiEvent('generic.access', userId, {
       ip: c.req.header('x-forwarded-for') || 'unknown',
-      userAgent: c.req.header('user-agent'),
+      userAgent: c.req.header('user-agent') || '',
       statusCode: 200
     });
     
     await next();
+    return; // Explicit return to satisfy TypeScript
   } catch (error) {
     defaultLogger.error(`Failed to create controller for table ${tableName}`, error as Error);
     return c.json({
@@ -243,7 +244,7 @@ genericData.post("/:tableName", async (c) => {
     const userId = auth?.user?.id || 'anonymous';
     await services.auditService.logApiEvent('generic.create', userId, {
       ip: c.req.header('x-forwarded-for') || 'unknown',
-      userAgent: c.req.header('user-agent'),
+      userAgent: c.req.header('user-agent') || '',
       statusCode: 201
     });
     
@@ -292,7 +293,7 @@ genericData.put("/:tableName/:id", async (c) => {
     const userId = auth?.user?.id || 'anonymous';
     await services.auditService.logApiEvent('generic.update', userId, {
       ip: c.req.header('x-forwarded-for') || 'unknown',
-      userAgent: c.req.header('user-agent'),
+      userAgent: c.req.header('user-agent') || '',
       statusCode: 200
     });
     
@@ -339,7 +340,7 @@ genericData.delete("/:tableName/:id", async (c) => {
     const userId = auth?.user?.id || 'anonymous';
     await services.auditService.logApiEvent('generic.delete', userId, {
       ip: c.req.header('x-forwarded-for') || 'unknown',
-      userAgent: c.req.header('user-agent'),
+      userAgent: c.req.header('user-agent') || '',
       statusCode: 200
     });
     
@@ -388,7 +389,7 @@ genericData.post("/:tableName/bulk", async (c) => {
     const userId = auth?.user?.id || 'anonymous';
     await services.auditService.logApiEvent('generic.bulk.create', userId, {
       ip: c.req.header('x-forwarded-for') || 'unknown',
-      userAgent: c.req.header('user-agent'),
+      userAgent: c.req.header('user-agent') || '',
       statusCode: 200
     });
     

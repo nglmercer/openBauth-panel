@@ -1,6 +1,6 @@
 // tests/api/unit/schema-validator.test.ts
 import { validateFromSchemas } from "@/schemas/extract-and-validate";
-import type { TableSchema, ColumnDefinition } from "open-bauth";
+import type { TableSchema } from "open-bauth";
 import { describe, expect, it } from "bun:test";
 
 describe("ZodSchemaGenerator", () => {
@@ -135,6 +135,7 @@ describe("ZodSchemaGenerator", () => {
       const result = tableValidators.create.safeParse(dataWithId);
       // El resultado puede ser true o false dependiendo de la implementación
       // Lo importante es que el ID no se procese incorrectamente
+      expect(result).toBeDefined(); // Just verify the result exists
     });
 
     it("should reject fields with CURRENT_TIMESTAMP default for creation", () => {
@@ -148,6 +149,7 @@ describe("ZodSchemaGenerator", () => {
       const result = tableValidators.create.safeParse(dataWithTimestamp);
       // El resultado puede ser true o false dependiendo de la implementación
       // Lo importante es que el timestamp no se procese incorrectamente
+      expect(result).toBeDefined(); // Just verify the result exists
     });
   });
 

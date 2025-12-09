@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import { DatabaseInitializer } from "open-bauth";
 import { JWTService } from "open-bauth";
 

@@ -1,9 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { app, initializeApp } from "../../src/index";
+import { initializeApp } from "../../src/index";
 import { testUtils, TEST_TIMEOUTS } from "../setup";
 
 describe("Authentication API", () => {
-  let server: any;
   let baseUrl: string;
 
   beforeEach(async () => {
@@ -11,13 +10,12 @@ describe("Authentication API", () => {
     await initializeApp();
     
     // Start test server
-    server = app.fetch;
     baseUrl = "http://localhost:3000/api/v1";
   });
 
   afterEach(async () => {
     // Clean up
-    server = null;
+    // server cleanup handled by app
   });
 
   test("should register a new user successfully", async () => {
@@ -157,13 +155,11 @@ describe("Authentication API", () => {
 });
 
 describe("Generic CRUD API", () => {
-  let server: any;
   let baseUrl: string;
   let authToken: string;
 
   beforeEach(async () => {
     await initializeApp();
-    server = app.fetch;
     baseUrl = "http://localhost:3000/api/v1";
 
     // Create a test user and get auth token

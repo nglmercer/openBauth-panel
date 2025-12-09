@@ -15,25 +15,40 @@ export interface AuditLog {
 
 export class AuditService {
   private controller: BaseController;
+  private initialized: boolean = false;
 
   constructor(dbInitializer: DatabaseInitializer) {
     this.controller = dbInitializer.createController('audit_logs');
     
-    // Ensure audit_logs table exists
-    this.initializeAuditTable();
+    // Initialize asynchronously to avoid blocking constructor
+    this.initializeAuditTable().catch(error => {
+      defaultLogger.error('Failed to initialize audit table', error as Error);
+    });
   }
 
-  private async initializeAuditTable() {
+  private async initializeAuditTable(): Promise<void> {
     try {
-      // Check if table exists, if not create it
+      // Check if table exists by trying to query it
       const result = await this.controller.findFirst({});
-      if (!result.success && (result.error as any)?.type === 'NOT_FOUND') {
-        // Table doesn't exist, we need to create it via schema extension
-        defaultLogger.info('Audit table initialized');
+      if (result.success) {
+        this.initialized = true;
+        defaultLogger.info('Audit table initialized successfully');
+      } else {
+        // Table might not exist or have issues
+        defaultLogger.warn('Audit table may not be properly initialized', result.error);
+        this.initialized = false;
       }
     } catch (error) {
       defaultLogger.error('Failed to initialize audit table', error as Error);
+      this.initialized = false;
     }
+  }
+
+  private async ensureInitialized(): Promise<boolean> {
+    if (!this.initialized) {
+      await this.initializeAuditTable();
+    }
+    return this.initialized;
   }
 
   async log(event: string, data: {
@@ -45,10 +60,17 @@ export class AuditService {
     metadata?: any;
   }): Promise<boolean> {
     try {
+      // Ensure audit table is initialized
+      const isInitialized = await this.ensureInitialized();
+      if (!isInitialized) {
+        defaultLogger.warn('Audit service not initialized, skipping audit log', { event, userId: data.userId });
+        return false;
+      }
+
       const auditLog: AuditLog = {
         event,
-        userId: data.userId || '',
-        ip: data.ip || '',
+        userId: data.userId || 'system',
+        ip: data.ip || 'unknown',
         userAgent: data.userAgent || '',
         level: data.level || 'info',
         message: data.message || event,
@@ -57,7 +79,7 @@ export class AuditService {
       };
 
       const result = await this.controller.create(auditLog);
-      
+       
       if (result.success) {
         defaultLogger.info(`Audit log created: ${event}`, {
           userId: data.userId,
@@ -65,7 +87,8 @@ export class AuditService {
         });
         return true;
       } else {
-        defaultLogger.error('Failed to create audit log', new Error((result.error as any)?.message));
+        // Log the error but don't throw it to avoid breaking the main flow
+        defaultLogger.error('Failed to create audit log', new Error(result.error ? String(result.error) : 'Unknown error'));
         return false;
       }
     } catch (error) {

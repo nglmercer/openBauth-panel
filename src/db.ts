@@ -6,6 +6,7 @@ import {
   PermissionService,
   getOAuthSchemas,
 } from "open-bauth";
+
 const db = new Database(":memory:"); //produccion "./database/auth.db" || test ":memory"
 const dbInitializer = new DatabaseInitializer({ database: db });
 const jwtService = new JWTService(process.env["JWT_SECRET"] || "dev-secret", "7d");

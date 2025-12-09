@@ -168,7 +168,7 @@ app.use("/dashboard/*", async (c, next) => {
       return c.json({ error: "Invalid token" }, 401);
     }
     
-    c.set('user', payload);
+    (c as any).set('user', payload);
     await next();
     return;
   } catch (error) {
