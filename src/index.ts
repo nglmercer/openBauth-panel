@@ -10,6 +10,8 @@ import { auth } from "./routes/auth";
 import { user } from "./routes/user";
 import { oauth } from "./routes/oauth";
 import { genericData } from "./routes/generic";
+import { adminRoutes } from "./routes/admin";
+import { uploadRoutes } from "./routes/upload";
 import { dbInitializer } from "./db";
 
 // Initialize the main application
@@ -93,7 +95,10 @@ app.get("/docs", (c) => {
 app.route("/auth", auth);
 app.route("/user", user);
 app.route("/oauth", oauth);
+app.route("/oauth2", oauth);
 app.route("/data", genericData);
+app.route("/admin", adminRoutes);
+app.route("/upload", uploadRoutes);
 
 // Static file serving (for uploaded files)
 if (process.env['UPLOAD_DIR']) {

@@ -33,8 +33,9 @@ describe("OAuth API", () => {
 
             const existingClient = db.query("SELECT * FROM oauth_clients WHERE client_id = 'test_client'").get();
             if (!existingClient) {
+                const hashedSecret = await Bun.password.hash("test_secret");
                 db.run(`INSERT INTO oauth_clients (id, client_id, client_secret, name, redirect_uris, scope, is_active) 
-                    VALUES ('client_123', 'test_client', 'test_secret', 'Test Client', 'http://localhost/callback', 'openid profile email', 1)`);
+                    VALUES ('client_123', 'test_client', ?, 'Test Client', 'http://localhost/callback', 'openid profile email', 1)`, [hashedSecret]);
             }
         } catch (e) {
             console.log("OAuth Setup Error:", e);

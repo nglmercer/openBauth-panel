@@ -120,6 +120,7 @@ app.get("/docs", (c) => {
 app.route("/auth", authRoutes);
 app.route("/user", userRoutes);
 app.route("/oauth", oauthRoutes);
+app.route("/oauth2", oauthRoutes);
 app.route("/admin", adminRoutes);
 app.route("/data", genericRoutes);
 app.route("/upload", uploadRoutes);

@@ -7,6 +7,9 @@ describe("Upload API", () => {
     let server: any;
 
     beforeEach(async () => {
+        process.env['UPLOAD_DIR'] = "./tests/uploads";
+        await Bun.write("./tests/uploads/.keep", ""); // Ensure dir exists
+
         await initializeApp();
         server = Bun.serve({
             port: 0,
@@ -32,9 +35,9 @@ describe("Upload API", () => {
         const fileContent = "Hello World";
 
         // Let's try to upload a valid type "mocked"
-        const validBlob = new Blob([fileContent], { type: "image/png" });
+        const validFile = new File([fileContent], "test.png", { type: "image/png" });
         const validFormData = new FormData();
-        validFormData.append("file", validBlob, "test.png");
+        validFormData.append("file", validFile);
 
         const validResponse = await fetch(`${baseUrl}/upload`, {
             method: "POST",

@@ -51,10 +51,12 @@ describe("Admin API", () => {
         const adminToken = loginResult.token;
 
         // 4. Access Admin Route
+        console.log("Requesting Admin URL:", `${baseUrl}/admin/users`);
         const listResponse = await fetch(`${baseUrl}/admin/users`, {
             headers: { "Authorization": `Bearer ${adminToken}` }
         });
 
+        console.log("Admin Response Status:", listResponse.status);
         if (listResponse.status !== 200) {
             console.log("Admin List Users Failed:", await listResponse.text());
         }
