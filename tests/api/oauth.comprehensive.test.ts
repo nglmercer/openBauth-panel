@@ -203,6 +203,16 @@ describe("OAuth API - Comprehensive Tests", () => {
                     body: tokenParams
                 });
 
+                // Debug: Log the response if it's not 200
+                if (tokenResponse.status !== 200) {
+                    const errorText = await tokenResponse.text();
+                    console.log("Token response error:", {
+                        status: tokenResponse.status,
+                        statusText: tokenResponse.statusText,
+                        body: errorText
+                    });
+                }
+
                 expect(tokenResponse.status).toBe(200);
                 const result = await tokenResponse.json() as any;
                 expect(result.access_token).toBeDefined();

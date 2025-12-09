@@ -244,9 +244,11 @@ genericData.get("/:tableName", async (c) => {
     // Build options with direct SQL query if field selection is requested
     let result: any;
 
-    if (validated.fields) {
-      // Use raw SQL for field selection
-      const selectedFields = validated.fields.split(',').map(f => f.trim()).join(', ');
+    if (validated.fields || validated.sort) {
+      // Use raw SQL for field selection or sorting
+      const selectedFields = validated.fields
+        ? validated.fields.split(',').map(f => f.trim()).join(', ')
+        : '*';
       let sql = `SELECT ${selectedFields} FROM ${tableName}`;
       const params: any[] = [];
 
@@ -288,14 +290,19 @@ genericData.get("/:tableName", async (c) => {
         where: Object.keys(filters).length > 0 ? filters : undefined
       };
 
-      // Sorting - pass orderBy and order separately
+      // Sorting - combine orderBy and order into SQL clause
       if (validated.sort) {
-        options.orderBy = validated.sort;
-        options.order = validated.order || 'asc';
+        options.orderBy = `${validated.sort} ${(validated.order || 'asc').toUpperCase()}`;
       }
+
+      // DEBUG: Log options
+      defaultLogger.info(`[GENERIC] findAll options:`, options);
 
       // Execute query
       result = await controller.findAll(options);
+
+      // DEBUG: Log result
+      defaultLogger.info(`[GENERIC] findAll result:`, { dataLength: result.data?.length, firstItem: result.data?.[0] });
     }
 
     // Add pagination metadata
