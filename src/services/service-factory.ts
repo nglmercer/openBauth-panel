@@ -7,8 +7,7 @@ import {
   SecurityService,
   EnhancedUserService
 } from 'open-bauth';
-import { Database } from 'bun:sqlite';
-import { db, dbInitializer, jwtService, authService, permissionService } from '../db';
+import { dbInitializer, jwtService, authService, permissionService } from '../db';
 import { NotificationService } from './notification';
 import { AuditService } from './audit';
 import { RateLimitService } from './rate-limit';

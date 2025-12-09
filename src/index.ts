@@ -12,7 +12,6 @@ import { auth } from "./routes/auth";
 import { user } from "./routes/user";
 import { oauth } from "./routes/oauth";
 import { genericData } from "./routes/generic";
-import { createAuthMiddlewareForHono } from "./middleware";
 
 // Initialize the main application
 const app = new Hono().basePath("/api/v1");
@@ -32,7 +31,7 @@ app.onError(errorHandler);
 
 // Initialize database and services
 let dbInitializer: DatabaseInitializer;
-let services: ReturnType<typeof getServiceFactory>["getServices"];
+let services: ReturnType<ReturnType<typeof getServiceFactory>["getServices"]>;
 
 async function initializeApp() {
   try {
@@ -51,7 +50,7 @@ async function initializeApp() {
     // Log successful initialization
     defaultLogger.info("Application initialized successfully", {
       database: process.env['DATABASE_URL'] || "auth.db",
-      jwtSecret: services.jwtService ? "configured" : "missing"
+      jwtSecret: services?.jwtService ? "configured" : "missing"
     });
     
   } catch (error) {

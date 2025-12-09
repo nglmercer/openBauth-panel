@@ -15,10 +15,8 @@ export interface AuditLog {
 
 export class AuditService {
   private controller: BaseController;
-  private dbInitializer: DatabaseInitializer;
 
   constructor(dbInitializer: DatabaseInitializer) {
-    this.dbInitializer = dbInitializer;
     this.controller = dbInitializer.createController('audit_logs');
     
     // Ensure audit_logs table exists
@@ -29,7 +27,7 @@ export class AuditService {
     try {
       // Check if table exists, if not create it
       const result = await this.controller.findFirst({});
-      if (!result.success && result.error?.type === 'NOT_FOUND') {
+      if (!result.success && (result.error as any)?.type === 'NOT_FOUND') {
         // Table doesn't exist, we need to create it via schema extension
         defaultLogger.info('Audit table initialized');
       }
@@ -49,9 +47,9 @@ export class AuditService {
     try {
       const auditLog: AuditLog = {
         event,
-        userId: data.userId,
-        ip: data.ip,
-        userAgent: data.userAgent,
+        userId: data.userId || '',
+        ip: data.ip || '',
+        userAgent: data.userAgent || '',
         level: data.level || 'info',
         message: data.message || event,
         metadata: data.metadata,
@@ -67,7 +65,7 @@ export class AuditService {
         });
         return true;
       } else {
-        defaultLogger.error('Failed to create audit log', new Error(result.error?.message));
+        defaultLogger.error('Failed to create audit log', new Error((result.error as any)?.message));
         return false;
       }
     } catch (error) {
@@ -80,7 +78,7 @@ export class AuditService {
     return this.log(event, {
       userId,
       ip,
-      userAgent,
+      userAgent: userAgent || '',
       level: success ? 'info' : 'error',
       message: `User ${userId} ${event} ${success ? 'successfully' : 'failed'}`,
       metadata: { success }
@@ -97,9 +95,9 @@ export class AuditService {
     const level = this.getSecurityLevel(data.threatLevel);
     
     return this.log(event, {
-      userId: data.userId,
+      userId: data.userId || '',
       ip: data.ip,
-      userAgent: data.userAgent,
+      userAgent: data.userAgent || '',
       level,
       message: `Security event: ${event}`,
       metadata: {
@@ -121,9 +119,9 @@ export class AuditService {
     const level = data.statusCode && data.statusCode >= 400 ? 'error' : 'info';
     
     return this.log(event, {
-      userId: data.userId,
+      userId: data.userId || '',
       ip: data.ip,
-      userAgent: data.userAgent,
+      userAgent: data.userAgent || '',
       level,
       message: `${method} ${path} - ${data.statusCode || 'unknown'}`,
       metadata: {
@@ -144,13 +142,13 @@ export class AuditService {
     error?: any;
   }): Promise<boolean> {
     return this.log(`database.${event}`, {
-      userId: data.userId,
+      userId: data.userId || '',
       level: data.error ? 'error' : 'info',
       message: `Database ${event} on ${data.table || 'unknown'}`,
       metadata: {
-        table: data.table,
-        operation: data.operation,
-        affectedRows: data.affectedRows,
+        table: data.table || '',
+        operation: data.operation || '',
+        affectedRows: data.affectedRows || 0,
         error: data.error
       }
     });
@@ -195,17 +193,16 @@ export class AuditService {
         where,
         limit: filters.limit || 100,
         offset: filters.offset || 0,
-        orderBy: 'timestamp',
-        order: 'DESC'
+        orderBy: 'timestamp'
       });
 
       if (result.success) {
         return {
-          logs: result.data || [],
+          logs: (result.data as any as AuditLog[]) || [],
           total: result.total || 0
         };
       } else {
-        defaultLogger.error('Failed to retrieve audit logs', new Error(result.error?.message));
+        defaultLogger.error('Failed to retrieve audit logs', new Error((result.error as any)?.message));
         return { logs: [], total: 0 };
       }
     } catch (error) {
@@ -226,7 +223,7 @@ export class AuditService {
       if (result.success && result.data) {
         let deletedCount = 0;
         for (const log of result.data) {
-          const deleteResult = await this.controller.delete(log.id);
+          const deleteResult = await this.controller.delete((log as any).id);
           if (deleteResult.success) deletedCount++;
         }
         

@@ -9,7 +9,7 @@ const factory = getServiceFactory();
 const services = factory.getServices();
 
 // Apply authentication middleware to all user routes
-user.use("*", createAuthMiddlewareForHono(services));
+user.use("*", createAuthMiddlewareForHono());
 
 // Validation schemas
 const updateProfileSchema = z.object({
@@ -61,7 +61,7 @@ const biometricSchema = z.object({
 // GET /api/v1/user/me - Get current user profile
 user.get("/me", async (c) => {
   try {
-    const auth = c.get("auth") as any;
+    const auth = (c as any).auth;
     const userId = auth.user.id;
     
     const user = await services.authService.findUserById(userId, {
@@ -104,7 +104,7 @@ user.get("/me", async (c) => {
 // PATCH /api/v1/user/me - Update current user profile
 user.patch("/me", async (c) => {
   try {
-    const auth = c.get("auth") as any;
+    const auth = (c as any).auth;
     const userId = auth.user.id;
     
     const body = await c.req.json();
@@ -121,7 +121,7 @@ user.patch("/me", async (c) => {
       }
     }
     
-    const result = await services.authService.updateUser(userId, validated);
+    const result = await services.authService.updateUser(userId, validated as any);
     
     if (!result.success) {
       return c.json({ 
@@ -161,7 +161,7 @@ user.patch("/me", async (c) => {
 // POST /api/v1/user/mfa/setup - Setup MFA
 user.post("/mfa/setup", async (c) => {
   try {
-    const auth = c.get("auth") as any;
+    const auth = (c as any).auth;
     const userId = auth.user.id;
     
     const body = await c.req.json();
@@ -182,7 +182,7 @@ user.post("/mfa/setup", async (c) => {
     
     switch (validated.mfaType) {
       case "totp":
-        setupResult = await services.enhancedUserService.setupMFA(userId, "totp", {
+        setupResult = await services.enhancedUserService.setupMFA(userId, "totp" as any, {
           is_primary: existingConfigs.length === 0
         });
         break;
@@ -194,14 +194,14 @@ user.post("/mfa/setup", async (c) => {
             error: "Phone number is required for SMS MFA" 
           }, 400);
         }
-        setupResult = await services.enhancedUserService.setupMFA(userId, "sms", {
+        setupResult = await services.enhancedUserService.setupMFA(userId, "sms" as any, {
           phone_number: validated.phoneNumber,
           is_primary: existingConfigs.length === 0
         });
         break;
         
       case "email":
-        setupResult = await services.enhancedUserService.setupMFA(userId, "email", {
+        setupResult = await services.enhancedUserService.setupMFA(userId, "email" as any, {
           email: validated.email || auth.user.email,
           is_primary: existingConfigs.length === 0
         });
@@ -242,7 +242,7 @@ user.post("/mfa/setup", async (c) => {
       success: true, 
       message: "MFA setup initiated",
       mfaType: validated.mfaType,
-      backupCodes: setupResult.backupCodes 
+      backupCodes: (setupResult as any).backupCodes
     });
     
   } catch (error) {
@@ -265,13 +265,13 @@ user.post("/mfa/setup", async (c) => {
 // POST /api/v1/user/mfa/verify - Verify MFA code
 user.post("/mfa/verify", async (c) => {
   try {
-    const auth = c.get("auth") as any;
+    const auth = (c as any).auth;
     const userId = auth.user.id;
     
     const body = await c.req.json();
     const validated = mfaVerifySchema.parse(body);
     
-    const result = await services.enhancedUserService.verifyMFA(userId, validated.mfaType, validated.code);
+    const result = await (services.enhancedUserService as any).verifyMFA(userId, validated.mfaType, validated.code);
     
     if (!result.success) {
       await services.auditService.logSecurityEvent('user.mfa.verification.failed', {
@@ -317,7 +317,7 @@ user.post("/mfa/verify", async (c) => {
 // GET /api/v1/user/devices - Get user devices
 user.get("/devices", async (c) => {
   try {
-    const auth = c.get("auth") as any;
+    const auth = (c as any).auth;
     const userId = auth.user.id;
     
     const devices = await services.enhancedUserService.getUserDevices(userId);
@@ -339,7 +339,7 @@ user.get("/devices", async (c) => {
 // POST /api/v1/user/devices - Register new device
 user.post("/devices", async (c) => {
   try {
-    const auth = c.get("auth") as any;
+    const auth = (c as any).auth;
     const userId = auth.user.id;
     
     const body = await c.req.json();
@@ -349,11 +349,9 @@ user.post("/devices", async (c) => {
       userId,
       validated.deviceId,
       validated.deviceName,
-      validated.deviceType,
-      {
-        platform: validated.platform,
-        userAgent: validated.userAgent
-      }
+      validated.deviceType as any,
+      validated.platform,
+      validated.userAgent
     );
     
     if (!result.success) {
@@ -394,7 +392,7 @@ user.post("/devices", async (c) => {
 // POST /api/v1/user/biometric - Register biometric credential
 user.post("/biometric", async (c) => {
   try {
-    const auth = c.get("auth") as any;
+    const auth = (c as any).auth;
     const userId = auth.user.id;
     
     const body = await c.req.json();
@@ -402,7 +400,7 @@ user.post("/biometric", async (c) => {
     
     const result = await services.enhancedUserService.registerBiometricCredential(
       userId,
-      validated.biometricType,
+      validated.biometricType as any,
       validated.encryptedData,
       validated.deviceId
     );
@@ -445,7 +443,7 @@ user.post("/biometric", async (c) => {
 // POST /api/v1/user/password - Update password
 user.post("/password", async (c) => {
   try {
-    const auth = c.get("auth") as any;
+    const auth = (c as any).auth;
     const userId = auth.user.id;
     
     const body = await c.req.json();
@@ -471,7 +469,7 @@ user.post("/password", async (c) => {
     }
     
     // Update password
-    const updateResult = await services.authService.updateUser(userId, {
+    const updateResult = await (services.authService as any).updateUser(userId, {
       password: validated.newPassword
     });
     

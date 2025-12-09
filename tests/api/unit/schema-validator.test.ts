@@ -1,5 +1,5 @@
 // tests/api/unit/schema-validator.test.ts
-import { ZodSchemaGenerator } from "../../../src/validator/schema-generator";
+import { validateFromSchemas } from "@/schemas/extract-and-validate";
 import type { TableSchema, ColumnDefinition } from "open-bauth";
 import { describe, expect, it } from "bun:test";
 
@@ -57,16 +57,17 @@ describe("ZodSchemaGenerator", () => {
 
   describe("generate", () => {
     it("should generate create, update and read validators", () => {
-      const validators = ZodSchemaGenerator.generate(testTableSchema);
+      const validators = validateFromSchemas([testTableSchema]);
 
-      expect(validators.create).toBeDefined();
-      expect(validators.update).toBeDefined();
-      expect(validators.read).toBeDefined();
+      expect(validators[testTableSchema.tableName]).toBeDefined();
+      expect(validators[testTableSchema.tableName]).toBeDefined();
+      expect(validators[testTableSchema.tableName]).toBeDefined();
     });
-  });
+  }); 
 
   describe("create validator", () => {
-    const validators = ZodSchemaGenerator.generate(testTableSchema);
+    const validators = validateFromSchemas([testTableSchema]);
+    const tableValidators = validators[testTableSchema.tableName];
 
     it("should validate correct data for creation", () => {
       const validData = {
@@ -78,7 +79,7 @@ describe("ZodSchemaGenerator", () => {
         description: "Test description",
       };
 
-      const result = validators.create.safeParse(validData);
+      const result = tableValidators.create.safeParse(validData);
       expect(result.success).toBe(true);
     });
 
@@ -89,7 +90,7 @@ describe("ZodSchemaGenerator", () => {
         is_active: true,
       };
 
-      const result = validators.create.safeParse(minimalData);
+      const result = tableValidators.create.safeParse(minimalData);
       expect(result.success).toBe(true);
     });
 
@@ -100,7 +101,7 @@ describe("ZodSchemaGenerator", () => {
         is_active: true,
       };
 
-      const result = validators.create.safeParse(invalidData);
+      const result = tableValidators.create.safeParse(invalidData);
       expect(result.success).toBe(false);
     });
 
@@ -110,7 +111,7 @@ describe("ZodSchemaGenerator", () => {
         is_active: true,
       };
 
-      const result = validators.create.safeParse(incompleteData);
+      const result = tableValidators.create.safeParse(incompleteData);
       expect(result.success).toBe(false);
     });
 
@@ -122,7 +123,7 @@ describe("ZodSchemaGenerator", () => {
         is_active: true,
       };
 
-      const result = validators.create.safeParse(dataWithId);
+      const result = tableValidators.create.safeParse(dataWithId);
       // El resultado puede ser true o false dependiendo de la implementación
       // Lo importante es que el ID no se procese incorrectamente
     });
@@ -135,28 +136,29 @@ describe("ZodSchemaGenerator", () => {
         created_at: new Date().toISOString(), // Este campo no debería incluirse
       };
 
-      const result = validators.create.safeParse(dataWithTimestamp);
+      const result = tableValidators.create.safeParse(dataWithTimestamp);
       // El resultado puede ser true o false dependiendo de la implementación
       // Lo importante es que el timestamp no se procese incorrectamente
     });
   });
 
   describe("update validator", () => {
-    const validators = ZodSchemaGenerator.generate(testTableSchema);
+    const validators = validateFromSchemas([testTableSchema]);
+    const tableValidators = validators[testTableSchema.tableName];
 
     it("should allow partial updates", () => {
       const partialUpdate = {
         name: "Updated Name",
       };
 
-      const result = validators.update.safeParse(partialUpdate);
+      const result = tableValidators.update.safeParse(partialUpdate);
       expect(result.success).toBe(true);
     });
 
     it("should allow empty updates", () => {
       const emptyUpdate = {};
 
-      const result = validators.update.safeParse(emptyUpdate);
+      const result = tableValidators.update.safeParse(emptyUpdate);
       expect(result.success).toBe(true);
     });
 
@@ -165,7 +167,7 @@ describe("ZodSchemaGenerator", () => {
         email: "not-an-email",
       };
 
-      const result = validators.update.safeParse(invalidUpdate);
+      const result = tableValidators.update.safeParse(invalidUpdate);
       expect(result.success).toBe(false);
     });
 
@@ -179,7 +181,7 @@ describe("ZodSchemaGenerator", () => {
         description: "Updated description",
       };
 
-      const result = validators.update.safeParse(fullUpdate);
+      const result = tableValidators.update.safeParse(fullUpdate);
       expect(result.success).toBe(true);
     });
 
@@ -192,7 +194,7 @@ describe("ZodSchemaGenerator", () => {
       };
 
       // Check if validation passes or fails with appropriate error
-      const result = validators.update.safeParse(nullableUpdate);
+      const result = tableValidators.update.safeParse(nullableUpdate);
 
       // If the test fails, it's likely because the schema doesn't properly handle null values
       // In that case, we can either fix the schema or adjust the test expectation
@@ -208,7 +210,8 @@ describe("ZodSchemaGenerator", () => {
   });
 
   describe("read validator", () => {
-    const validators = ZodSchemaGenerator.generate(testTableSchema);
+    const validators = validateFromSchemas([testTableSchema]);
+    const tableValidators = validators[testTableSchema.tableName];
 
     it("should validate all fields for reading", () => {
       const fullData = {
@@ -222,7 +225,7 @@ describe("ZodSchemaGenerator", () => {
         description: "Test description",
       };
 
-      const result = validators.read.safeParse(fullData);
+      const result = tableValidators.read.safeParse(fullData);
       expect(result.success).toBe(true);
     });
 
@@ -238,7 +241,7 @@ describe("ZodSchemaGenerator", () => {
         description: null,
       };
 
-      const result = validators.read.safeParse(dataWithNulls);
+      const result = tableValidators.read.safeParse(dataWithNulls);
       expect(result.success).toBe(true);
     });
 
@@ -254,7 +257,7 @@ describe("ZodSchemaGenerator", () => {
         description: "Test description",
       };
 
-      const result = validators.read.safeParse(dataWithInvalidNulls);
+      const result = tableValidators.read.safeParse(dataWithInvalidNulls);
       expect(result.success).toBe(false);
     });
   });
@@ -284,7 +287,8 @@ describe("ZodSchemaGenerator", () => {
         ],
       };
 
-      const validators = ZodSchemaGenerator.generate(passwordSchema);
+      const validators = validateFromSchemas([passwordSchema]);
+      const tableValidators = validators[passwordSchema.tableName];
 
       // Valid password should pass
       const validPassword = {
@@ -292,7 +296,7 @@ describe("ZodSchemaGenerator", () => {
         password: "strongPassword123",
       };
 
-      const validResult = validators.create.safeParse(validPassword);
+      const validResult = tableValidators.create.safeParse(validPassword);
       expect(validResult.success).toBe(true);
 
       // Short password should fail
@@ -301,7 +305,7 @@ describe("ZodSchemaGenerator", () => {
         password: "short",
       };
 
-      const shortResult = validators.create.safeParse(shortPassword);
+      const shortResult = tableValidators.create.safeParse(shortPassword);
       expect(shortResult.success).toBe(false);
     });
 
@@ -329,7 +333,8 @@ describe("ZodSchemaGenerator", () => {
         ],
       };
 
-      const validators = ZodSchemaGenerator.generate(numericSchema);
+      const validators = validateFromSchemas([numericSchema]);
+      const tableValidators = validators[numericSchema.tableName];
 
       // Numeric values should pass
       const numericData = {
@@ -337,7 +342,7 @@ describe("ZodSchemaGenerator", () => {
         real_field: 3.14159,
       };
 
-      const validResult = validators.create.safeParse(numericData);
+      const validResult = tableValidators.create.safeParse(numericData);
       expect(validResult.success).toBe(true);
 
       // String representations of numbers should also pass due to preprocessing
@@ -346,7 +351,7 @@ describe("ZodSchemaGenerator", () => {
         real_field: "3.14159",
       };
 
-      const stringResult = validators.create.safeParse(stringNumbers);
+      const stringResult = tableValidators.create.safeParse(stringNumbers);
       expect(stringResult.success).toBe(true);
 
       // Invalid numeric values should fail
@@ -355,7 +360,7 @@ describe("ZodSchemaGenerator", () => {
         real_field: "also-not-a-number",
       };
 
-      const invalidResult = validators.create.safeParse(invalidNumbers);
+      const invalidResult = tableValidators.create.safeParse(invalidNumbers);
       expect(invalidResult.success).toBe(false);
     });
 
@@ -378,14 +383,15 @@ describe("ZodSchemaGenerator", () => {
         ],
       };
 
-      const validators = ZodSchemaGenerator.generate(booleanSchema);
+      const validators = validateFromSchemas([booleanSchema]);
+      const tableValidators = validators[booleanSchema.tableName];
 
       // Boolean values should pass
       const booleanData = {
         bool_field: true,
       };
 
-      const validResult = validators.create.safeParse(booleanData);
+      const validResult = tableValidators.create.safeParse(booleanData);
       expect(validResult.success).toBe(true);
 
       // String representations of booleans should also pass due to preprocessing
@@ -393,7 +399,7 @@ describe("ZodSchemaGenerator", () => {
         bool_field: "true",
       };
 
-      const stringResult = validators.create.safeParse(stringBooleans);
+      const stringResult = tableValidators.create.safeParse(stringBooleans);
       expect(stringResult.success).toBe(true);
     });
   });

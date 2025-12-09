@@ -52,17 +52,17 @@ oauth.get("/authorize", async (c) => {
     // Verify client
     const client = await services.oauthService.findClientByClientId(validated.client_id);
     if (!client || !client.is_active) {
-      return c.json({ 
-        error: "invalid_client", 
-        error_description: "Client not found or inactive" 
+      return c.json({
+        error: "invalid_client",
+        error_description: "Client not found or inactive"
       }, 400);
     }
     
     // Verify redirect URI
     if (!services.oauthService.validateRedirectUri(validated.client_id, validated.redirect_uri)) {
-      return c.json({ 
-        error: "invalid_request", 
-        error_description: "Invalid redirect URI" 
+      return c.json({
+        error: "invalid_request",
+        error_description: "Invalid redirect URI"
       }, 400);
     }
     
@@ -118,19 +118,25 @@ oauth.get("/authorize", async (c) => {
       return c.redirect(redirectUrl.toString());
     }
     
+    // Return error for unsupported response types
+    return c.json({
+      error: "unsupported_response_type",
+      error_description: "Response type not supported"
+    }, 400);
+    
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return c.json({ 
-        error: "invalid_request", 
+      return c.json({
+        error: "invalid_request",
         error_description: "Invalid request parameters",
-        details: error.errors 
+        details: error.errors
       }, 400);
     }
     
     defaultLogger.error("Authorization error", error as Error);
-    return c.json({ 
-      error: "server_error", 
-      error_description: "Internal server error" 
+    return c.json({
+      error: "server_error",
+      error_description: "Internal server error"
     }, 500);
   }
 });
@@ -532,7 +538,7 @@ oauth.get("/jwks", async (c) => {
 });
 
 // GET /api/v1/oauth/userinfo - OIDC UserInfo endpoint
-oauth.get("/userinfo", createAuthMiddlewareForHono(services), async (c) => {
+oauth.get("/userinfo", createAuthMiddlewareForHono(), async (c) => {
   try {
     const auth = (c as any).auth;
     const user = auth.user;

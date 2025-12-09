@@ -268,9 +268,9 @@ auth.post("/refresh", async (c) => {
 });
 
 // POST /api/v1/auth/logout - Revoke current session
-auth.post("/logout", createAuthMiddlewareForHono(services), async (c) => {
+auth.post("/logout", createAuthMiddlewareForHono(), async (c) => {
   try {
-    const auth = c.get("auth") as any;
+    const auth = (c as any).auth;
     
     // Revoke refresh token if provided
     const body = await c.req.json().catch(() => ({}));

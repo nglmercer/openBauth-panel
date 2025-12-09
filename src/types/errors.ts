@@ -75,7 +75,7 @@ export function handleError(error: any): ApiError {
     return {
       message: error.message,
       type: error.type,
-      code: error.code,
+      code: error.code!,
       details: error.details,
       statusCode: error.statusCode,
     };

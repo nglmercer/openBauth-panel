@@ -1,8 +1,8 @@
-import { z, email } from "zod";
+import { z } from "zod";
 
 // Base User Schema (para reutilización)
 const baseUserSchema = {
-  email: email("Debe ser un email válido"),
+  email: z.string().email("Debe ser un email válido"),
   username: z
     .string()
     .min(3, "El nombre de usuario debe tener al menos 3 caracteres"),
@@ -14,7 +14,7 @@ const baseUserSchema = {
 export const authSchemas = {
   // Login (solo email/password)
   login: z.object({
-    email: email("Debe ser un email válido"),
+    email: z.string().email("Debe ser un email válido"),
     password: z
       .string()
       .min(8, "La contraseña debe tener al menos 8 caracteres"),
@@ -48,7 +48,7 @@ export const userSchemas = {
 
   // Actualización de usuario (campos opcionales)
   update: z.object({
-    email: email("Debe ser un email válido").optional(),
+    email: z.string().email("Debe ser un email válido").optional(),
     username: z
       .string()
       .min(3, "El nombre de usuario debe tener al menos 3 caracteres")

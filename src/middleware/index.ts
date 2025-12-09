@@ -1,4 +1,3 @@
-import { Hono } from "hono";
 import { getServiceFactory } from "../services/service-factory";
 import { defaultLogger } from "../utils/logger";
 
@@ -136,12 +135,8 @@ export function createAuthMiddlewareForHono(options: {
 
 // Create role-based middleware using open-bauth's implementation
 export function createRoleMiddlewareForHono(roles: string[]) {
-  const factory = getServiceFactory();
-  const services = factory.getServices();
   // Create a simple role check middleware
   return async (c: any, next: any) => {
-    const factory = getServiceFactory();
-    const services = factory.getServices();
     
     // Check if user has required roles
     const auth = c.auth;
@@ -166,12 +161,8 @@ export function createRoleMiddlewareForHono(roles: string[]) {
 
 // Create permission-based middleware using open-bauth's implementation
 export function createPermissionMiddlewareForHono(permissions: string[], options: { requireAll?: boolean } = {}) {
-  const factory = getServiceFactory();
-  const services = factory.getServices();
   // Create a simple permission check middleware
   return async (c: any, next: any) => {
-    const factory = getServiceFactory();
-    const services = factory.getServices();
     
     // Check if user has required permissions
     const auth = c.auth;
@@ -207,9 +198,7 @@ export function createRateLimitMiddlewareForHono(options: {
   const {
     windowMs = 60 * 1000, // 1 minute
     max = 100,
-    keyGenerator = (c) => c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown',
-    skipSuccessfulRequests = false,
-    skipFailedRequests = false
+    keyGenerator = (c) => c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown'
   } = options;
   
   return async (c: any, next: any) => {
