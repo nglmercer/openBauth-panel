@@ -5,7 +5,7 @@ import { defaultLogger } from "../utils/logger";
 // import { isSystemTable } from "../utils/system-tables";
 import { BaseController } from "open-bauth";
 
-const genericData = new Hono();
+export const genericData = new Hono();
 const factory = getServiceFactory();
 const services = factory.getServices();
 
@@ -70,9 +70,9 @@ genericData.use("/:tableName/*", async (c, next) => {
     await next();
   } catch (error) {
     defaultLogger.error(`Failed to create controller for table ${tableName}`, error as Error);
-    return c.json({ 
-      success: false, 
-      error: "Table not found or access denied" 
+    return c.json({
+      success: false,
+      error: "Table not found or access denied"
     }, 404);
   }
 });

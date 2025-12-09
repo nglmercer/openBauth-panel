@@ -4,7 +4,7 @@ import { getServiceFactory } from "../services/service-factory";
 import { createAuthMiddlewareForHono } from "../middleware";
 import { defaultLogger } from "../utils/logger";
 
-const user = new Hono();
+export const user = new Hono();
 const factory = getServiceFactory();
 const services = factory.getServices();
 

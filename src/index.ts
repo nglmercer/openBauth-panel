@@ -20,8 +20,10 @@ const app = new Hono().basePath("/api/v1");
 // Global middleware
 app.use("*", logger());
 app.use("*", prettyJSON());
+//process.env['FRONTEND_URL'] || "http://localhost:3000"
 app.use("*", cors({
-  origin: process.env['FRONTEND_URL'] || "http://localhost:3000",
+  origin: "*",
+  allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   credentials: true
 }));
 
@@ -149,7 +151,6 @@ process.on("SIGTERM", async () => {
 export { app, initializeApp, services };
 
 // Start server if this file is run directly
-if (import.meta.main) {
   const port = parseInt(process.env['PORT'] || "3000");
   
   initializeApp()
@@ -169,4 +170,4 @@ if (import.meta.main) {
       defaultLogger.error("Failed to start server", error);
       process.exit(1);
     });
-}
+

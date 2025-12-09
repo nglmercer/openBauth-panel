@@ -170,6 +170,7 @@ app.use("/dashboard/*", async (c, next) => {
     
     c.set('user', payload);
     await next();
+    return;
   } catch (error) {
     return c.json({ error: "Token verification failed" }, 401);
   }
