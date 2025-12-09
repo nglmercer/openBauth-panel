@@ -1,0 +1,506 @@
+import { Hono } from "hono";
+import { z } from "zod";
+import { getServiceFactory } from "../services/service-factory";
+import { defaultLogger } from "../utils/logger";
+// import { isSystemTable } from "../utils/system-tables";
+import { BaseController } from "open-bauth";
+
+const genericData = new Hono();
+const factory = getServiceFactory();
+const services = factory.getServices();
+
+// Validation schemas
+const querySchema = z.object({
+  page: z.string().regex(/^\d+$/).transform(Number).optional(),
+  limit: z.string().regex(/^\d+$/).transform(Number).optional(),
+  sort: z.string().optional(),
+  order: z.enum(["asc", "desc"]).optional(),
+  fields: z.string().optional()
+});
+
+const createSchema = z.object({
+  data: z.record(z.any())
+});
+
+const updateSchema = z.object({
+  data: z.record(z.any())
+});
+
+const bulkSchema = z.object({
+  records: z.array(z.record(z.any()))
+});
+
+// Store controllers in a Map for reuse
+const controllers = new Map<string, BaseController>();
+
+// Helper function to get or create controller
+function getController(tableName: string): BaseController {
+  if (!controllers.has(tableName)) {
+    const controller = services.dbInitializer.createController(tableName);
+    controllers.set(tableName, controller);
+  }
+  return controllers.get(tableName)!;
+}
+
+// Middleware to validate table name and create controller
+genericData.use("/:tableName/*", async (c, next) => {
+  const tableName = c.req.param("tableName");
+  
+  // Check if it's a system table
+  // if (isSystemTable(tableName)) {
+  //   return c.json({
+  //     success: false,
+  //     error: "Access to system tables is forbidden"
+  //   }, 403);
+  // }
+  
+  try {
+    // Store table name in context
+    (c as any).tableName = tableName;
+    
+    // Log access for audit
+    const auth = (c as any).auth;
+    const userId = auth?.user?.id || 'anonymous';
+    await services.auditService.logApiEvent('generic.access', userId, {
+      ip: c.req.header('x-forwarded-for') || 'unknown',
+      userAgent: c.req.header('user-agent'),
+      statusCode: 200
+    });
+    
+    await next();
+  } catch (error) {
+    defaultLogger.error(`Failed to create controller for table ${tableName}`, error as Error);
+    return c.json({ 
+      success: false, 
+      error: "Table not found or access denied" 
+    }, 404);
+  }
+});
+
+// GET /api/v1/data/:tableName/schema - Get table schema
+genericData.get("/:tableName/schema", async (c) => {
+  try {
+    const tableName = (c as any).tableName;
+    
+    // For now, return a basic schema response
+    // In a real implementation, you would extract this from the database
+    const schema = {
+      tableName: tableName,
+      columns: [
+        { name: "id", type: "TEXT", primaryKey: true, nullable: false },
+        { name: "created_at", type: "DATETIME", nullable: false },
+        { name: "updated_at", type: "DATETIME", nullable: false }
+      ],
+      indexes: [],
+      foreignKeys: []
+    };
+    
+    return c.json({ 
+      success: true, 
+      schema 
+    });
+    
+  } catch (error) {
+    defaultLogger.error("Schema retrieval error", error as Error);
+    return c.json({ 
+      success: false, 
+      error: "Failed to retrieve table schema" 
+    }, 500);
+  }
+});
+
+// GET /api/v1/data/:tableName - List records with pagination and filtering
+genericData.get("/:tableName", async (c) => {
+  try {
+    const tableName = (c as any).tableName;
+    const controller = getController(tableName);
+    const query = c.req.query();
+    
+    // Parse and validate query parameters
+    const validated = querySchema.parse(query);
+    
+    // Build filter from query parameters (excluding pagination params)
+    const filters: Record<string, any> = {};
+    Object.entries(query).forEach(([key, value]) => {
+      if (!['page', 'limit', 'sort', 'order', 'fields'].includes(key) && value) {
+        // Try to parse as JSON for complex filters
+        try {
+          filters[key] = JSON.parse(value as string);
+        } catch {
+          filters[key] = value;
+        }
+      }
+    });
+    
+    // Pagination
+    const page = validated.page || 1;
+    const limit = Math.min(validated.limit || 20, 100); // Max 100 items per page
+    const offset = (page - 1) * limit;
+    
+    // Build options
+    const options: any = {
+      limit,
+      offset,
+      where: Object.keys(filters).length > 0 ? filters : undefined
+    };
+    
+    // Sorting
+    if (validated.sort) {
+      options.orderBy = validated.sort;
+      options.order = validated.order || 'asc';
+    }
+    
+    // Field selection
+    if (validated.fields) {
+      options.select = validated.fields.split(',').map(f => f.trim());
+    }
+    
+    // Execute query
+    const result = await controller.findAll(options);
+    
+    // Add pagination metadata
+    const response = {
+      success: true,
+      data: result.data,
+      pagination: {
+        page,
+        limit,
+        total: result.total || 0,
+        totalPages: Math.ceil((result.total || 0) / limit),
+        hasNext: page * limit < (result.total || 0),
+        hasPrev: page > 1
+      }
+    };
+    
+    return c.json(response);
+    
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ 
+        success: false, 
+        error: "Invalid query parameters", 
+        details: error.errors 
+      }, 400);
+    }
+    
+    defaultLogger.error("List records error", error as Error);
+    return c.json({ 
+      success: false, 
+      error: "Failed to retrieve records" 
+    }, 500);
+  }
+});
+
+// GET /api/v1/data/:tableName/:id - Get single record
+genericData.get("/:tableName/:id", async (c) => {
+  try {
+    const tableName = (c as any).tableName;
+    const controller = getController(tableName);
+    const id = c.req.param("id");
+    
+    const result = await controller.findById(id);
+    
+    if (!result.success || !result.data) {
+      return c.json({ 
+        success: false, 
+        error: "Record not found" 
+      }, 404);
+    }
+    
+    return c.json({ 
+      success: true, 
+      data: result.data 
+    });
+    
+  } catch (error) {
+    defaultLogger.error("Get record error", error as Error);
+    return c.json({ 
+      success: false, 
+      error: "Failed to retrieve record" 
+    }, 500);
+  }
+});
+
+// POST /api/v1/data/:tableName - Create new record
+genericData.post("/:tableName", async (c) => {
+  try {
+    const tableName = (c as any).tableName;
+    const controller = getController(tableName);
+    const body = await c.req.json();
+    const validated = createSchema.parse(body);
+    
+    const result = await controller.create(validated.data);
+    
+    if (!result.success) {
+      return c.json({ 
+        success: false, 
+        error: result.error || "Failed to create record" 
+      }, 400);
+    }
+    
+    // Log creation for audit
+    const auth = (c as any).auth;
+    const userId = auth?.user?.id || 'anonymous';
+    await services.auditService.logApiEvent('generic.create', userId, {
+      ip: c.req.header('x-forwarded-for') || 'unknown',
+      userAgent: c.req.header('user-agent'),
+      statusCode: 201
+    });
+    
+    return c.json({ 
+      success: true, 
+      data: result.data 
+    }, 201);
+    
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ 
+        success: false, 
+        error: "Invalid request data", 
+        details: error.errors 
+      }, 400);
+    }
+    
+    defaultLogger.error("Create record error", error as Error);
+    return c.json({ 
+      success: false, 
+      error: "Failed to create record" 
+    }, 500);
+  }
+});
+
+// PUT /api/v1/data/:tableName/:id - Update record
+genericData.put("/:tableName/:id", async (c) => {
+  try {
+    const tableName = (c as any).tableName;
+    const controller = getController(tableName);
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const validated = updateSchema.parse(body);
+    
+    const result = await controller.update(id, validated.data);
+    
+    if (!result.success) {
+      return c.json({ 
+        success: false, 
+        error: result.error || "Failed to update record" 
+      }, 400);
+    }
+    
+    // Log update for audit
+    const auth = (c as any).auth;
+    const userId = auth?.user?.id || 'anonymous';
+    await services.auditService.logApiEvent('generic.update', userId, {
+      ip: c.req.header('x-forwarded-for') || 'unknown',
+      userAgent: c.req.header('user-agent'),
+      statusCode: 200
+    });
+    
+    return c.json({ 
+      success: true, 
+      data: result.data 
+    });
+    
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ 
+        success: false, 
+        error: "Invalid request data", 
+        details: error.errors 
+      }, 400);
+    }
+    
+    defaultLogger.error("Update record error", error as Error);
+    return c.json({ 
+      success: false, 
+      error: "Failed to update record" 
+    }, 500);
+  }
+});
+
+// DELETE /api/v1/data/:tableName/:id - Delete record
+genericData.delete("/:tableName/:id", async (c) => {
+  try {
+    const tableName = (c as any).tableName;
+    const controller = getController(tableName);
+    const id = c.req.param("id");
+    
+    const result = await controller.delete(id);
+    
+    if (!result.success) {
+      return c.json({ 
+        success: false, 
+        error: result.error || "Failed to delete record" 
+      }, 400);
+    }
+    
+    // Log deletion for audit
+    const auth = (c as any).auth;
+    const userId = auth?.user?.id || 'anonymous';
+    await services.auditService.logApiEvent('generic.delete', userId, {
+      ip: c.req.header('x-forwarded-for') || 'unknown',
+      userAgent: c.req.header('user-agent'),
+      statusCode: 200
+    });
+    
+    return c.json({ 
+      success: true, 
+      message: "Record deleted successfully" 
+    });
+    
+  } catch (error) {
+    defaultLogger.error("Delete record error", error as Error);
+    return c.json({ 
+      success: false, 
+      error: "Failed to delete record" 
+    }, 500);
+  }
+});
+
+// POST /api/v1/data/:tableName/bulk - Bulk operations
+genericData.post("/:tableName/bulk", async (c) => {
+  try {
+    const tableName = (c as any).tableName;
+    const controller = getController(tableName);
+    const body = await c.req.json();
+    const validated = bulkSchema.parse(body);
+    
+    // Validate each record
+    for (const record of validated.records) {
+      if (!record || typeof record !== 'object') {
+        return c.json({ 
+          success: false, 
+          error: "Invalid record format" 
+        }, 400);
+      }
+    }
+    
+    // Perform bulk insert
+    const results = await Promise.all(
+      validated.records.map(record => controller.create(record))
+    );
+    
+    const successful = results.filter((r: any) => r.success);
+    const failed = results.filter((r: any) => !r.success);
+    
+    // Log bulk operation for audit
+    const auth = (c as any).auth;
+    const userId = auth?.user?.id || 'anonymous';
+    await services.auditService.logApiEvent('generic.bulk.create', userId, {
+      ip: c.req.header('x-forwarded-for') || 'unknown',
+      userAgent: c.req.header('user-agent'),
+      statusCode: 200
+    });
+    
+    return c.json({ 
+      success: true, 
+      results: {
+        total: validated.records.length,
+        successful: successful.length,
+        failed: failed.length,
+        errors: failed.map((r: any, i: number) => ({ index: i, error: r.error }))
+      }
+    });
+    
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ 
+        success: false, 
+        error: "Invalid request data", 
+        details: error.errors 
+      }, 400);
+    }
+    
+    defaultLogger.error("Bulk operation error", error as Error);
+    return c.json({ 
+      success: false, 
+      error: "Failed to perform bulk operation" 
+    }, 500);
+  }
+});
+
+// GET /api/v1/data/:tableName/count - Get record count
+genericData.get("/:tableName/count", async (c) => {
+  try {
+    const tableName = (c as any).tableName;
+    const controller = getController(tableName);
+    const query = c.req.query();
+    
+    // Build filter from query parameters
+    const filters: Record<string, any> = {};
+    Object.entries(query).forEach(([key, value]) => {
+      if (value) {
+        try {
+          filters[key] = JSON.parse(value as string);
+        } catch {
+          filters[key] = value;
+        }
+      }
+    });
+    
+    const result = await controller.count(Object.keys(filters).length > 0 ? filters : undefined);
+    
+    return c.json({ 
+      success: true, 
+      count: result 
+    });
+    
+  } catch (error) {
+    defaultLogger.error("Count records error", error as Error);
+    return c.json({ 
+      success: false, 
+      error: "Failed to count records" 
+    }, 500);
+  }
+});
+
+// GET /api/v1/data/:tableName/search - Advanced search
+genericData.get("/:tableName/search", async (c) => {
+  try {
+    const tableName = (c as any).tableName;
+    const controller = getController(tableName);
+    const query = c.req.query();
+    
+    // Parse search parameters
+    const searchParams: any = {};
+    const options: any = {};
+    
+    Object.entries(query).forEach(([key, value]) => {
+      if (key === 'q' || key === 'query') {
+        searchParams.search = value;
+      } else if (key === 'limit') {
+        options.limit = Math.min(parseInt(value as string) || 20, 100);
+      } else if (key === 'offset') {
+        options.offset = parseInt(value as string) || 0;
+      } else if (key === 'sort') {
+        options.orderBy = value;
+      } else if (key === 'order') {
+        options.order = value;
+      } else if (value) {
+        // Add to search filters
+        try {
+          searchParams[key] = JSON.parse(value as string);
+        } catch {
+          searchParams[key] = value;
+        }
+      }
+    });
+    
+    const result = await controller.search(searchParams, options);
+    
+    return c.json({ 
+      success: true, 
+      data: result.data,
+      total: result.total 
+    });
+    
+  } catch (error) {
+    defaultLogger.error("Search records error", error as Error);
+    return c.json({ 
+      success: false, 
+      error: "Failed to search records" 
+    }, 500);
+  }
+});
+
+export { genericData as genericRoutes };

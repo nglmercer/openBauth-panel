@@ -10,20 +10,20 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "db:seed": "bun run scripts/seed.ts",
-    "db:migrate": "bun run scripts/migrate.ts"
+    "db:migrate": "bun run scripts/migrate.ts",
+    "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
-    "hono": "^3.12.0",
     "@hono/node-server": "^1.3.1",
-    "zod": "^3.22.4",
-    "jsonwebtoken": "^9.0.2",
     "bcrypt": "^5.1.1",
+    "dotenv": "^16.3.1",
+    "hono": "^3.12.0",
     "nodemailer": "^6.9.7",
-    "dotenv": "^16.3.1"
+    "open-bauth": "^1.4.0",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/jsonwebtoken": "^9.0.5",
     "@types/bcrypt": "^5.0.2",
     "@types/nodemailer": "^6.4.14",
     "@types/node": "^20.10.5",

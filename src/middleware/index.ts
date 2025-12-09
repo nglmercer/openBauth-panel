@@ -1,180 +1,375 @@
-import {
-  db,
-  dbInitializer,
-  jwtService,
-  authService,
-  permissionService,
-} from "../db";
-import type {
-  AuthRequest,
-  AuthContext,
-  PermissionOptions,
-  JWTService,
-  AuthService,
-  PermissionService,
-} from "open-bauth";
-import type { Context, Next } from "hono";
-import type { AppError } from "../types/errors";
+import { Hono } from "hono";
+import { getServiceFactory } from "../services/service-factory";
+import { defaultLogger } from "../utils/logger";
 
-async function authenticateRequest(
-  request: AuthRequest,
-  services: {
-    jwtService: JWTService;
-    authService: AuthService;
-    permissionService: PermissionService;
-  },
-  required: boolean = true,
-): Promise<{
-  success: boolean;
-  context?: AuthContext;
-  error?: string;
-  statusCode?: number;
-}> {
-  const tokenHeader = request.headers["authorization"];
-  if (!tokenHeader) {
-    return {
-      success: false,
-      error: "Authorization header is missing",
-      statusCode: 401,
-    };
-  }
-  const token = services.jwtService.extractTokenFromHeader(tokenHeader);
-  if (!token) {
-    return {
-      success: false,
-      error: "Bearer token is missing or malformed",
-      statusCode: 401,
-    };
-  }
-  try {
-    const payload = await services.jwtService.verifyToken(token);
-    const user = await services.authService.findUserById(payload.userId, {
-      includeRoles: true,
-    });
-    if (!user || !user.is_active) {
-      return {
-        success: false,
-        error: "User not found or is inactive",
-        statusCode: 401,
+// Create auth middleware for Hono that wraps the open-bauth middleware
+export function createAuthMiddlewareForHono(options: {
+  required?: boolean;
+  roles?: string[];
+  permissions?: string[];
+  requireAll?: boolean;
+} = {}) {
+  const factory = getServiceFactory();
+  const services = factory.getServices();
+  
+  return async (c: any, next: any) => {
+    try {
+      // Get authorization header
+      const authHeader = c.req.header("authorization");
+      
+      if (!authHeader) {
+        if (options.required !== false) {
+          return c.json({ 
+            success: false, 
+            error: "Authorization header required" 
+          }, 401);
+        }
+        c.auth = { isAuthenticated: false };
+        await next();
+        return;
+      }
+      
+      // Extract token
+      const token = authHeader.replace("Bearer ", "");
+      if (!token) {
+        if (options.required !== false) {
+          return c.json({ 
+            success: false, 
+            error: "Invalid authorization header format" 
+          }, 401);
+        }
+        c.auth = { isAuthenticated: false };
+        await next();
+        return;
+      }
+      
+      // Verify token
+      const payload = await services.jwtService.verifyToken(token);
+      if (!payload) {
+        if (options.required !== false) {
+          return c.json({ 
+            success: false, 
+            error: "Invalid or expired token" 
+          }, 401);
+        }
+        c.auth = { isAuthenticated: false };
+        await next();
+        return;
+      }
+      
+      // Get user
+      const user = await services.authService.findUserById(payload.userId);
+      if (!user) {
+        if (options.required !== false) {
+          return c.json({ 
+            success: false, 
+            error: "User not found" 
+          }, 401);
+        }
+        c.auth = { isAuthenticated: false };
+        await next();
+        return;
+      }
+      
+      // Check roles if specified
+      if (options.roles && options.roles.length > 0) {
+        // Get user roles from the user object or fetch them
+        const userRoles = user.roles || [];
+        const hasRole = options.roles.some(role =>
+          userRoles.some(userRole =>
+            typeof userRole === 'string' ? userRole === role : userRole.name === role
+          )
+        );
+        
+        if (!hasRole) {
+          return c.json({
+            success: false,
+            error: "Insufficient permissions"
+          }, 403);
+        }
+      }
+      
+      // Check permissions if specified
+      if (options.permissions && options.permissions.length > 0) {
+        const hasPermission = options.requireAll 
+          ? await Promise.all(options.permissions.map(permission => 
+              services.permissionService.userHasPermission(user.id, permission)
+            )).then(results => results.every(Boolean))
+          : await Promise.any(options.permissions.map(permission => 
+              services.permissionService.userHasPermission(user.id, permission)
+            ));
+        
+        if (!hasPermission) {
+          return c.json({ 
+            success: false, 
+            error: "Insufficient permissions" 
+          }, 403);
+        }
+      }
+      
+      // Set auth context
+      c.auth = {
+        isAuthenticated: true,
+        user,
+        roles: payload.roles || [],
+        permissions: (payload as any).permissions || [],
+        token
       };
-    }
-    const userRoles = await services.authService.getUserRoles(user.id);
-    let userPermissions: string[] = [];
-    for (const role of userRoles) {
-      const rolePermissions =
-        await services.permissionService.getRolePermissions(role.id);
-      userPermissions.push(...rolePermissions.map((p) => p.name));
-    }
-    userPermissions = [...new Set(userPermissions)];
-    const context: AuthContext = {
-      user: user,
-      token: token,
-      permissions: userPermissions,
-      isAuthenticated: true,
-    };
-    return { success: true, context: context };
-  } catch (error) {
-    return {
-      success: false,
-      error: "Invalid or expired token",
-      statusCode: 401,
-    };
-  }
-}
-
-export function createAuthMiddlewareForHono(
-  services: {
-    jwtService: JWTService;
-    authService: AuthService;
-    permissionService: PermissionService;
-  },
-  required: boolean = true,
-) {
-  // La función devuelta es el middleware real de Hono
-  return async (c: Context, next: Next) => {
-    const request: AuthRequest = { headers: c.req.header() };
-
-    // For optional auth, check if authorization header exists first
-    if (!required && !request.headers["authorization"]) {
-      c.set("auth", {
-        user: undefined,
-        isAuthenticated: false,
-        permissions: [],
-      });
+      
       await next();
-      return;
-    }
-
-    const result = await authenticateRequest(request, services, required);
-    if (result.success && result.context) {
-      c.set("auth", result.context); // Adjuntar el contexto a la petición de Hono
-      await next(); // Éxito: continuar con el siguiente handler
-      return;
-    }
-
-    // Si la autenticación falla...
-    if (required) {
-      return c.json({ error: result.error }, (result.statusCode as 401) || 401);
-    } else {
-      c.set("auth", {
-        user: undefined,
-        isAuthenticated: false,
-        permissions: [],
-      });
+      
+    } catch (error) {
+      defaultLogger.error("Auth middleware error", error as Error);
+      
+      if (options.required !== false) {
+        return c.json({ 
+          success: false, 
+          error: "Authentication failed" 
+        }, 401);
+      }
+      
+      c.auth = { isAuthenticated: false };
       await next();
     }
   };
 }
 
-export function createPermissionMiddlewareForHono(
-  requiredPermissions: string[],
-  options: PermissionOptions = { requireAll: false },
-) {
-  return async (c: Context, next: Next) => {
-    const authContext: AuthContext | undefined = c.get("auth");
-
-    if (!authContext?.isAuthenticated) {
-      return c.json({ error: "Authentication required" }, 401);
+// Create role-based middleware using open-bauth's implementation
+export function createRoleMiddlewareForHono(roles: string[]) {
+  const factory = getServiceFactory();
+  const services = factory.getServices();
+  // Create a simple role check middleware
+  return async (c: any, next: any) => {
+    const factory = getServiceFactory();
+    const services = factory.getServices();
+    
+    // Check if user has required roles
+    const auth = c.auth;
+    if (!auth?.isAuthenticated) {
+      return c.json({ success: false, error: "Authentication required" }, 401);
     }
-
-    const userPermissions = authContext.permissions || [];
-    let hasPermission: boolean;
-
-    if (options.requireAll) {
-      hasPermission = requiredPermissions.every((p) =>
-        userPermissions.includes(p),
-      );
-    } else {
-      hasPermission = requiredPermissions.some((p) =>
-        userPermissions.includes(p),
-      );
-    }
-
-    if (!hasPermission) {
-      return c.json({ error: "Insufficient permissions" }, 403);
-    }
-
-    await next(); // Éxito: continuar
-  };
-}
-
-export function createRoleMiddlewareForHono(requiredRoles: string[]) {
-  return async (c: Context, next: Next) => {
-    const authContext: AuthContext | undefined = c.get("auth");
-
-    if (!authContext?.isAuthenticated || !authContext.user?.roles) {
-      return c.json({ error: "Authentication required" }, 401);
-    }
-
-    const userRoleNames = authContext.user.roles.map((r) => r.name);
-    const hasRole = requiredRoles.some((requiredRole) =>
-      userRoleNames.includes(requiredRole),
+    
+    const userRoles = auth.user.roles || [];
+    const hasRole = roles.some(role =>
+      userRoles.some((userRole: any) =>
+        typeof userRole === 'string' ? userRole === role : userRole.name === role
+      )
     );
-
+    
     if (!hasRole) {
-      return c.json({ error: "Access denied. Required role not found." }, 403);
+      return c.json({ success: false, error: "Insufficient permissions" }, 403);
     }
-
+    
     await next();
   };
 }
+
+// Create permission-based middleware using open-bauth's implementation
+export function createPermissionMiddlewareForHono(permissions: string[], options: { requireAll?: boolean } = {}) {
+  const factory = getServiceFactory();
+  const services = factory.getServices();
+  // Create a simple permission check middleware
+  return async (c: any, next: any) => {
+    const factory = getServiceFactory();
+    const services = factory.getServices();
+    
+    // Check if user has required permissions
+    const auth = c.auth;
+    if (!auth?.isAuthenticated) {
+      return c.json({ success: false, error: "Authentication required" }, 401);
+    }
+    
+    const userPermissions = auth.permissions || [];
+    
+    const hasPermission = options.requireAll
+      ? permissions.every(permission => userPermissions.includes(permission))
+      : permissions.some(permission => userPermissions.includes(permission));
+    
+    if (!hasPermission) {
+      return c.json({ success: false, error: "Insufficient permissions" }, 403);
+    }
+    
+    await next();
+  };
+}
+
+// Rate limiting middleware for Hono
+export function createRateLimitMiddlewareForHono(options: {
+  windowMs?: number;
+  max?: number;
+  keyGenerator?: (c: any) => string;
+  skipSuccessfulRequests?: boolean;
+  skipFailedRequests?: boolean;
+} = {}) {
+  const factory = getServiceFactory();
+  const services = factory.getServices();
+  
+  const {
+    windowMs = 60 * 1000, // 1 minute
+    max = 100,
+    keyGenerator = (c) => c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown',
+    skipSuccessfulRequests = false,
+    skipFailedRequests = false
+  } = options;
+  
+  return async (c: any, next: any) => {
+    try {
+      const key = keyGenerator(c);
+      const current = await services.rateLimitService.consume(key);
+      
+      if (!current) {
+        return c.json({ 
+          success: false, 
+          error: "Too many requests",
+          retryAfter: Math.ceil(windowMs / 1000)
+        }, 429);
+      }
+      
+      // Set rate limit headers
+      c.header('X-RateLimit-Limit', max.toString());
+      c.header('X-RateLimit-Remaining', (max - current.remaining).toString());
+      c.header('X-RateLimit-Reset', (Date.now() + windowMs).toString());
+      
+      await next();
+      
+    } catch (error) {
+      defaultLogger.error("Rate limit middleware error", error as Error);
+      return c.json({ 
+        success: false, 
+        error: "Rate limiting service unavailable" 
+      }, 500);
+    }
+  };
+}
+
+// Audit logging middleware for Hono
+export function createAuditMiddlewareForHono(eventType: string) {
+  const factory = getServiceFactory();
+  const services = factory.getServices();
+  
+  return async (c: any, next: any) => {
+    const startTime = Date.now();
+    const userId = c.auth?.user?.id || 'anonymous';
+    const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
+    const userAgent = c.req.header('user-agent') || 'unknown';
+    
+    try {
+      await next();
+      
+      const responseTime = Date.now() - startTime;
+      const statusCode = c.res.status;
+      
+      // Log successful request
+      await services.auditService.logApiEvent(eventType, userId, {
+        ip,
+        userAgent,
+        statusCode,
+        responseTime
+      });
+      
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
+      
+      // Log failed request
+      await services.auditService.logApiEvent(eventType, userId, {
+        ip,
+        userAgent,
+        statusCode: 500,
+        responseTime,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      
+      throw error;
+    }
+  };
+}
+
+// CORS middleware for Hono with specific configuration
+export function createCorsMiddlewareForHono(options: {
+  origin?: string | string[] | ((origin: string) => boolean);
+  credentials?: boolean;
+  methods?: string[];
+  headers?: string[];
+} = {}) {
+  const {
+    origin = '*',
+    credentials = false,
+    methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    headers = ['Content-Type', 'Authorization', 'X-Requested-With']
+  } = options;
+  
+  return async (c: any, next: any) => {
+    const requestOrigin = c.req.header('origin');
+    
+    // Set CORS headers
+    if (typeof origin === 'string') {
+      c.header('Access-Control-Allow-Origin', origin);
+    } else if (Array.isArray(origin)) {
+      if (requestOrigin && origin.includes(requestOrigin)) {
+        c.header('Access-Control-Allow-Origin', requestOrigin);
+      }
+    } else if (typeof origin === 'function') {
+      if (requestOrigin && origin(requestOrigin)) {
+        c.header('Access-Control-Allow-Origin', requestOrigin);
+      }
+    }
+    
+    if (credentials) {
+      c.header('Access-Control-Allow-Credentials', 'true');
+    }
+    
+    c.header('Access-Control-Allow-Methods', methods.join(', '));
+    c.header('Access-Control-Allow-Headers', headers.join(', '));
+    
+    // Handle preflight requests
+    if (c.req.method === 'OPTIONS') {
+      return c.text('', 204);
+    }
+    
+    await next();
+  };
+}
+
+// Security headers middleware for Hono
+export function createSecurityHeadersMiddlewareForHono() {
+  return async (c: any, next: any) => {
+    // Security headers
+    c.header('X-Content-Type-Options', 'nosniff');
+    c.header('X-Frame-Options', 'DENY');
+    c.header('X-XSS-Protection', '1; mode=block');
+    c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    c.header('Content-Security-Policy', "default-src 'self'");
+    
+    await next();
+  };
+}
+
+// Request validation middleware for Hono
+export function createValidationMiddlewareForHono(schema: any) {
+  return async (c: any, next: any) => {
+    try {
+      const body = await c.req.json();
+      const validated = schema.parse(body);
+      c.set('validatedBody', validated);
+      await next();
+    } catch (error) {
+      return c.json({ 
+        success: false, 
+        error: "Validation failed", 
+        details: error 
+      }, 400);
+    }
+  };
+}
+
+// Export all middleware creators
+export {
+  createAuthMiddlewareForHono as createAuthMiddleware,
+  createRoleMiddlewareForHono as createRoleMiddleware,
+  createPermissionMiddlewareForHono as createPermissionMiddleware,
+  createRateLimitMiddlewareForHono as createRateLimitMiddleware,
+  createAuditMiddlewareForHono as createAuditMiddleware,
+  createCorsMiddlewareForHono as createCorsMiddleware,
+  createSecurityHeadersMiddlewareForHono as createSecurityHeadersMiddleware,
+  createValidationMiddlewareForHono as createValidationMiddleware
+};

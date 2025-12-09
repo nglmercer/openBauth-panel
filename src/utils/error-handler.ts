@@ -1,10 +1,10 @@
 import type { Context } from "hono";
+import type { ApiError } from "../types/errors";
 import {
-  AppErrorType,
+  DatabaseErrorType,
   CustomError,
   handleError as handleAppError,
 } from "../types/errors";
-import type { ApiError } from "../types";
 
 /**
  * Helper function to check if an object is a Hono Context
@@ -96,7 +96,7 @@ export class ErrorResponse {
   static validation(message: string, details?: Record<string, any>): ApiError {
     return {
       message,
-      code: AppErrorType.VALIDATION_ERROR,
+      code: DatabaseErrorType.VALIDATION_ERROR,
       statusCode: 400,
       details,
     };
@@ -110,7 +110,7 @@ export class ErrorResponse {
   static authentication(message: string = "Authentication required"): ApiError {
     return {
       message,
-      code: AppErrorType.AUTHENTICATION_ERROR,
+      code: DatabaseErrorType.AUTHENTICATION_ERROR,
       statusCode: 401,
     };
   }
@@ -123,7 +123,7 @@ export class ErrorResponse {
   static authorization(message: string = "Insufficient permissions"): ApiError {
     return {
       message,
-      code: AppErrorType.AUTHORIZATION_ERROR,
+      code: DatabaseErrorType.AUTHORIZATION_ERROR,
       statusCode: 403,
     };
   }
@@ -136,7 +136,7 @@ export class ErrorResponse {
   static notFound(message: string = "Resource not found"): ApiError {
     return {
       message,
-      code: AppErrorType.NOT_FOUND_ERROR,
+      code: DatabaseErrorType.NOT_FOUND_ERROR,
       statusCode: 404,
     };
   }
@@ -149,7 +149,7 @@ export class ErrorResponse {
   static conflict(message: string = "Resource already exists"): ApiError {
     return {
       message,
-      code: AppErrorType.CONFLICT_ERROR,
+      code: DatabaseErrorType.CONFLICT_ERROR,
       statusCode: 409,
     };
   }
@@ -162,7 +162,7 @@ export class ErrorResponse {
   static database(message: string = "Database error occurred"): ApiError {
     return {
       message,
-      code: AppErrorType.DATABASE_ERROR,
+      code: DatabaseErrorType.DATABASE_ERROR,
       statusCode: 500,
     };
   }
@@ -175,7 +175,7 @@ export class ErrorResponse {
   static internal(message: string = "Internal server error"): ApiError {
     return {
       message,
-      code: AppErrorType.INTERNAL_SERVER_ERROR,
+      code: DatabaseErrorType.INTERNAL_SERVER_ERROR,
       statusCode: 500,
     };
   }
@@ -188,7 +188,7 @@ export class ErrorResponse {
   static rateLimit(message: string = "Too many requests"): ApiError {
     return {
       message,
-      code: AppErrorType.RATE_LIMIT_ERROR,
+      code: DatabaseErrorType.RATE_LIMIT_ERROR,
       statusCode: 429,
     };
   }
@@ -203,7 +203,7 @@ export class ErrorResponse {
   ): ApiError {
     return {
       message,
-      code: AppErrorType.SERVICE_UNAVAILABLE_ERROR,
+      code: DatabaseErrorType.SERVICE_UNAVAILABLE_ERROR,
       statusCode: 503,
     };
   }
@@ -216,7 +216,7 @@ export class ErrorResponse {
   static badRequest(message: string = "Bad request"): ApiError {
     return {
       message,
-      code: AppErrorType.BAD_REQUEST_ERROR,
+      code: DatabaseErrorType.BAD_REQUEST_ERROR,
       statusCode: 400,
     };
   }

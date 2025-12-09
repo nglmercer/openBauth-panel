@@ -12,9 +12,9 @@ import { faker } from "@faker-js/faker";
 // Initialize database
 const db = new Database("./database/test-data.db");
 const dbInitializer = new DatabaseInitializer({ database: db });
-const jwtService = new JWTService(process.env.JWT_SECRET || "dev-secret", "7d");
+const jwtService = new JWTService(process.env["JWT_SECRET"] || "dev-secret", "7d");
 const authService = new AuthService(dbInitializer, jwtService);
-const permissionService = new PermissionService(dbInitializer);
+new PermissionService(dbInitializer); // Create instance but don't assign to unused variable
 
 // Register OAuth schemas
 const oauthSchemas = getOAuthSchemas();
