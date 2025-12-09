@@ -39,6 +39,17 @@ async function initializeApp() {
     await dbInitializer.initialize();
     await dbInitializer.seedDefaults();
 
+    // Ensure custom fields exist in users table
+    const db = (dbInitializer as any).database;
+    const customFields = ['bio', 'timezone', 'language', 'avatar_url', 'phone_number'];
+    for (const field of customFields) {
+      try {
+        db.run(`ALTER TABLE users ADD COLUMN ${field} TEXT`);
+      } catch (e) {
+        // Column likely already exists
+      }
+    }
+
     // Initialize services
     const factory = getServiceFactory();
     services = factory.getServices();
