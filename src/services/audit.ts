@@ -18,12 +18,26 @@ export class AuditService {
   private initialized: boolean = false;
 
   constructor(dbInitializer: DatabaseInitializer) {
-    this.controller = dbInitializer.createController('audit_logs');
-    
-    // Initialize asynchronously to avoid blocking constructor
-    this.initializeAuditTable().catch(error => {
-      defaultLogger.error('Failed to initialize audit table', error as Error);
-    });
+    try {
+      this.controller = dbInitializer.createController('audit_logs');
+      
+      // Initialize asynchronously to avoid blocking constructor
+      this.initializeAuditTable().catch(error => {
+        defaultLogger.warn('Audit table not available, audit logging disabled', error as Error);
+        this.initialized = false;
+      });
+    } catch (error) {
+      defaultLogger.warn('Failed to create audit controller, audit logging disabled', error as Error);
+      this.initialized = false;
+      // Create a dummy controller that does nothing
+      this.controller = {
+        create: async () => ({ success: true }),
+        findFirst: async () => ({ success: false, error: 'Audit disabled' }),
+        findAll: async () => ({ success: false, error: 'Audit disabled', data: [], total: 0 }),
+        search: async () => ({ success: false, error: 'Audit disabled', data: [], total: 0 }),
+        delete: async () => ({ success: true })
+      } as any;
+    }
   }
 
   private async initializeAuditTable(): Promise<void> {

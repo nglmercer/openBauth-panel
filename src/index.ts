@@ -3,7 +3,6 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
 import { serveStatic } from "hono/bun";
-import { Database } from "bun:sqlite";
 import { DatabaseInitializer } from "open-bauth";
 import { getServiceFactory } from "./services/service-factory";
 import { defaultLogger } from "./utils/logger";
@@ -12,6 +11,7 @@ import { auth } from "./routes/auth";
 import { user } from "./routes/user";
 import { oauth } from "./routes/oauth";
 import { genericData } from "./routes/generic";
+import { dbInitializer } from "./db";
 
 // Initialize the main application
 const app = new Hono().basePath("/api/v1");
@@ -30,29 +30,24 @@ app.use("*", cors({
 app.onError(errorHandler);
 
 // Initialize database and services
-let dbInitializer: DatabaseInitializer;
 let services: ReturnType<ReturnType<typeof getServiceFactory>["getServices"]>;
 
 async function initializeApp() {
   try {
-    // Initialize database
-    const db = new Database(process.env['DATABASE_URL'] || "auth.db");
-    dbInitializer = new DatabaseInitializer({ database: db });
-    
     // Initialize database schema
     await dbInitializer.initialize();
     await dbInitializer.seedDefaults();
-    
+
     // Initialize services
     const factory = getServiceFactory();
     services = factory.getServices();
-    
+
     // Log successful initialization
     defaultLogger.info("Application initialized successfully", {
       database: process.env['DATABASE_URL'] || "auth.db",
       jwtSecret: services?.jwtService ? "configured" : "missing"
     });
-    
+
   } catch (error) {
     defaultLogger.error("Failed to initialize application", error as Error);
     throw error;
@@ -122,27 +117,27 @@ app.all("*", (c) => {
 // Graceful shutdown
 process.on("SIGINT", async () => {
   defaultLogger.info("Shutting down application...");
-  
+
   if (dbInitializer) {
     // DatabaseInitializer doesn't have a close method, but we can close the underlying database
     if (dbInitializer && (dbInitializer as any).database) {
       (dbInitializer as any).database.close();
     }
   }
-  
+
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
   defaultLogger.info("Shutting down application...");
-  
+
   if (dbInitializer) {
     // DatabaseInitializer doesn't have a close method, but we can close the underlying database
     if (dbInitializer && (dbInitializer as any).database) {
       (dbInitializer as any).database.close();
     }
   }
-  
+
   process.exit(0);
 });
 
@@ -150,23 +145,24 @@ process.on("SIGTERM", async () => {
 export { app, initializeApp, services };
 
 // Start server if this file is run directly
-  const port = parseInt(process.env['PORT'] || "3000");
-  
-  initializeApp()
-    .then(() => {
-      defaultLogger.info(`Starting server on port ${port}`);
-      
-      Bun.serve({
-        port,
-        fetch: app.fetch
-      });
-      
-      defaultLogger.info(`🚀 OpenBauth API server running on http://localhost:${port}/api/v1`);
-      defaultLogger.info("📚 API Documentation available at http://localhost:${port}/api/v1/docs");
-      defaultLogger.info("❤️  Health check at http://localhost:${port}/api/v1/health");
-    })
-    .catch((error) => {
-      defaultLogger.error("Failed to start server", error);
-      process.exit(1);
+const port = parseInt(process.env['PORT'] || "3000");
+
+initializeApp()
+  .then(() => {
+    defaultLogger.info(`Starting server on port ${port}`);
+
+    Bun.serve({
+      port,
+      fetch: app.fetch
     });
+
+    defaultLogger.info(`🚀 OpenBauth API server running on http://localhost:${port}/api/v1`);
+    defaultLogger.info("📚 API Documentation available at http://localhost:${port}/api/v1/docs");
+    defaultLogger.info("❤️  Health check at http://localhost:${port}/api/v1/health");
+  })
+  .catch((error) => {
+    defaultLogger.error("Failed to start server", error);
+    process.exit(1);
+  });
+
 
