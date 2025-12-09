@@ -425,7 +425,7 @@ describe("Authentication API - Comprehensive Tests", () => {
         }, TEST_TIMEOUTS.MEDIUM);
 
         test("should reject password reset with mismatched passwords", async () => {
-            const resetResponse = await fetch(`${baseUrl} / auth / reset - password`, {
+            const resetResponse = await fetch(`${baseUrl}/auth/reset-password`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -445,7 +445,7 @@ describe("Authentication API - Comprehensive Tests", () => {
     describe("POST /auth/verify-email", () => {
         test("should verify email with valid token", async () => {
             const userData = testUtils.generateTestUser();
-            const signupResponse = await fetch(`${baseUrl} / auth / signup`, {
+            const signupResponse = await fetch(`${baseUrl}/auth/signup`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(userData)
@@ -459,7 +459,7 @@ describe("Authentication API - Comprehensive Tests", () => {
             const services = factory.getServices();
             const verificationToken = await services.verificationService.createToken(userId, 'VERIFY_EMAIL');
 
-            const verifyResponse = await fetch(`${baseUrl} / auth / verify - email`, {
+            const verifyResponse = await fetch(`${baseUrl}/auth/verify-email`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ token: verificationToken })
@@ -472,7 +472,7 @@ describe("Authentication API - Comprehensive Tests", () => {
         }, TEST_TIMEOUTS.MEDIUM);
 
         test("should reject email verification with invalid token", async () => {
-            const verifyResponse = await fetch(`${baseUrl} / auth / verify - email`, {
+            const verifyResponse = await fetch(`${baseUrl}/auth/verify-email`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ token: "invalid-token" })

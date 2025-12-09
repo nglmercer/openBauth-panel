@@ -76,7 +76,8 @@ export class ServiceFactory {
       this._oauthService = new OAuthService(
         this._dbInitializer,
         this.getSecurityService(),
-        this._jwtService
+        this._jwtService,
+        this._authService
       );
     }
     return this._oauthService;

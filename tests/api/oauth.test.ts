@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { initializeApp, app } from "../../src/index";
 import { testUtils, TEST_TIMEOUTS } from "../setup";
 import { getServiceFactory } from "../../src/services/service-factory";
-import { OAuthGrantType, OAuthResponseType } from "node_modules/open-bauth/dist/src/types/oauth";
+import { OAuthGrantType, OAuthResponseType } from "open-bauth";
 describe("OAuth API", () => {
 
     // Get services
@@ -31,28 +31,17 @@ describe("OAuth API", () => {
 
         // Create test client in DB
         try {
-            /*
-            export declare enum OAuthGrantType {
-    AUTHORIZATION_CODE = "authorization_code",
-    IMPLICIT = "implicit",
-    RESOURCE_OWNER_PASSWORD_CREDENTIALS = "password",
-    CLIENT_CREDENTIALS = "client_credentials",
-    REFRESH_TOKEN = "refresh_token",
-    DEVICE_CODE = "urn:ietf:params:oauth:grant-type:device_code",
-    JWT_BEARER = "urn:ietf:params:oauth:grant-type:jwt-bearer",
-    SAML2_BEARER = "urn:ietf:params:oauth:grant-type:saml2-bearer"
-}
-export declare enum OAuthResponseType {
-    CODE = "code",
-    TOKEN = "token",
-    ID_TOKEN = "id_token",
-    NONE = "none"
-}
-            */
+
+            const clientId = `test_client_${Date.now()}`;
+            (global as any).testClientId = clientId;
             const services = getServiceFactory().getServices();
+            const hashedSecret = await Bun.password.hash("test_secret", {
+                algorithm: "bcrypt",
+                cost: 10
+            });
             await services.oauthService.createClient({
-                client_id: "test_client",
-                client_secret: "test_secret",
+                client_id: clientId,
+                client_secret: hashedSecret,
                 client_name: "Test Client",
                 redirect_uris: ["http://localhost/callback"],
                 grant_types: ["client_credentials", "password", "authorization_code", "refresh_token"] as OAuthGrantType[],
@@ -76,7 +65,7 @@ export declare enum OAuthResponseType {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
                 grant_type: "client_credentials",
-                client_id: "test_client",
+                client_id: (global as any).testClientId,
                 client_secret: "test_secret",
                 scope: "openid"
             }).toString()
@@ -106,7 +95,8 @@ export declare enum OAuthResponseType {
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
                 grant_type: "password",
-                client_id: "test_client",
+                client_id: (global as any).testClientId,
+                client_secret: "test_secret",
                 username: userData.email,
                 password: userData.password,
                 scope: "openid profile"

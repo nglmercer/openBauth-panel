@@ -259,6 +259,14 @@ auth.post("/refresh", async (c) => {
       }, 400);
     }
 
+    const errorMessage = (error as Error).message;
+    if (errorMessage.includes("Invalid refresh token")) {
+      return c.json({
+        success: false,
+        error: "Invalid refresh token"
+      }, 401);
+    }
+
     defaultLogger.error("Token refresh error", error as Error);
     return c.json({
       success: false,

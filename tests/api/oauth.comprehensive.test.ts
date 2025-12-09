@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { initializeApp, app } from "../../src/index";
 import { testUtils, TEST_TIMEOUTS } from "../setup";
-import { OAuthGrantType, OAuthResponseType } from "node_modules/open-bauth/dist/src/types/oauth";
+import { OAuthGrantType, OAuthResponseType } from "open-bauth";
 
 describe("OAuth API - Comprehensive Tests", () => {
     let baseUrl: string;
@@ -422,6 +422,13 @@ describe("OAuth API - Comprehensive Tests", () => {
                     body: refreshParams
                 });
 
+                if (refreshResponse.status !== 200) {
+                    const errorText = await refreshResponse.text();
+                    console.log("Refresh Token Error:", {
+                        status: refreshResponse.status,
+                        body: errorText
+                    });
+                }
                 expect(refreshResponse.status).toBe(200);
                 const refreshResult = await refreshResponse.json() as any;
                 expect(refreshResult.access_token).toBeDefined();
