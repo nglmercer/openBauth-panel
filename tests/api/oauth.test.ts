@@ -1,9 +1,11 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { initializeApp, app } from "../../src/index";
 import { testUtils, TEST_TIMEOUTS } from "../setup";
-import { db } from "../../src/db";
-
+import { getServiceFactory } from "../../src/services/service-factory";
+import { OAuthGrantType, OAuthResponseType } from "node_modules/open-bauth/dist/src/types/oauth";
 describe("OAuth API", () => {
+
+    // Get services
     let baseUrl: string;
     let server: any;
 
@@ -15,31 +17,53 @@ describe("OAuth API", () => {
         });
         baseUrl = `http://localhost:${server.port}/api/v1`;
 
+        /*         
         try {
             // Verify table exists
-            const tables = db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='oauth_clients'").get();
-            if (!tables) {
-                console.log("Create oauth_clients manually as it is missing");
-                db.run(`CREATE TABLE IF NOT EXISTS oauth_clients (
-                    id TEXT PRIMARY KEY, 
-                    client_id TEXT UNIQUE NOT NULL, 
-                    client_secret TEXT, 
-                    name TEXT, 
-                    redirect_uris TEXT, 
-                    scope TEXT, 
-                    is_active INTEGER DEFAULT 1
-                )`);
-            }
+            const table = dbInitializer.getSchemas();
+            const oauthClientsTable = table.find((t) => t.tableName === "oauth_clients");
+            console.log("table", oauthClientsTable);
 
-            const existingClient = db.query("SELECT * FROM oauth_clients WHERE client_id = 'test_client'").get();
-            if (!existingClient) {
-                const hashedSecret = await Bun.password.hash("test_secret");
-                db.run(`INSERT INTO oauth_clients (id, client_id, client_secret, name, redirect_uris, scope, is_active) 
-                    VALUES ('client_123', 'test_client', ?, 'Test Client', 'http://localhost/callback', 'openid profile email', 1)`, [hashedSecret]);
-            }
         } catch (e) {
             console.log("OAuth Setup Error:", e);
+        } 
+        */
+
+        // Create test client in DB
+        try {
+            /*
+            export declare enum OAuthGrantType {
+    AUTHORIZATION_CODE = "authorization_code",
+    IMPLICIT = "implicit",
+    RESOURCE_OWNER_PASSWORD_CREDENTIALS = "password",
+    CLIENT_CREDENTIALS = "client_credentials",
+    REFRESH_TOKEN = "refresh_token",
+    DEVICE_CODE = "urn:ietf:params:oauth:grant-type:device_code",
+    JWT_BEARER = "urn:ietf:params:oauth:grant-type:jwt-bearer",
+    SAML2_BEARER = "urn:ietf:params:oauth:grant-type:saml2-bearer"
+}
+export declare enum OAuthResponseType {
+    CODE = "code",
+    TOKEN = "token",
+    ID_TOKEN = "id_token",
+    NONE = "none"
+}
+            */
+            const services = getServiceFactory().getServices();
+            await services.oauthService.createClient({
+                client_id: "test_client",
+                client_secret: "test_secret",
+                client_name: "Test Client",
+                redirect_uris: ["http://localhost/callback"],
+                grant_types: ["client_credentials", "password", "authorization_code", "refresh_token"] as OAuthGrantType[],
+                response_types: ["code", "token"] as OAuthResponseType[],
+                scope: "openid profile email"
+            });
+        } catch (e) {
+            // Ignore if already exists (primary key violation usually)
+            // console.log("Test client creation suppressed:", e);
         }
+
     });
 
     afterEach(() => {
@@ -75,7 +99,7 @@ describe("OAuth API", () => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(userData)
         });
-        expect(signupResponse.status).toBe(200);
+        expect(signupResponse.status).toBe(201);
 
         const response = await fetch(`${baseUrl}/oauth/token`, {
             method: "POST",
