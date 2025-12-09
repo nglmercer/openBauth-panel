@@ -305,7 +305,7 @@ auth.post("/forgot-password", async (c) => {
 
     if (user) {
       // Generate and store reset token
-      const resetToken = await services.verificationService.createToken(user.id, 'RESET_PASSWORD');
+      await services.verificationService.createToken(user.id, 'RESET_PASSWORD');
 
       await services.auditService.logSecurityEvent('user.password.reset.requested', {
         userId: user.id,

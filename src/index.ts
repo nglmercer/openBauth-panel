@@ -3,7 +3,6 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
 import { serveStatic } from "hono/bun";
-import { DatabaseInitializer } from "open-bauth";
 import { getServiceFactory } from "./services/service-factory";
 import { defaultLogger } from "./utils/logger";
 import { errorHandler } from "./utils/error-handler";

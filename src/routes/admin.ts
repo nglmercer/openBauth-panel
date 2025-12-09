@@ -89,7 +89,13 @@ admin.post("/users/:id/roles", async (c) => {
     try {
         const userId = c.req.param("id");
         const body = await c.req.json();
-        const roleName = body.role; // Expecting { role: "admin" }
+
+        // Use schema to validate
+        const validated = assignRoleSchema.parse({
+            userId,
+            role: body.role
+        });
+        const roleName = validated.role;
 
         // This would typically involve inserting into user_roles table
         // Or using helper service

@@ -26,9 +26,13 @@ upload.post("/", authMiddleware, uploadMiddleware, async (c) => {
 
         const file = files[0];
 
-        await services.auditService.logApiEvent('file.upload', (c as any).auth.user.id, {
-            filename: file.originalName,
-            key: file.key
+        await services.auditService.log('file.upload', {
+            userId: (c as any).auth.user.id,
+            message: `File uploaded: ${file.originalName}`,
+            metadata: {
+                filename: file.originalName,
+                key: file.key
+            }
         });
 
         return c.json({

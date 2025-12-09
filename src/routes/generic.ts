@@ -42,6 +42,21 @@ function getController(tableName: string): BaseController {
   return controllers.get(tableName)!;
 }
 
+// GET /api/v1/data/tables - List all tables
+genericData.get("/tables", async (c) => {
+  try {
+    const { getSchemas } = await import("../database/base-controller");
+    const schemas = await getSchemas();
+    return c.json({
+      success: true,
+      data: schemas
+    });
+  } catch (error) {
+    defaultLogger.error("List tables error", error as Error);
+    return c.json({ success: false, error: "Failed to list tables" }, 500);
+  }
+});
+
 // Middleware to validate table name and create controller
 genericData.use("/:tableName/*", async (c, next) => {
   const tableName = c.req.param("tableName");

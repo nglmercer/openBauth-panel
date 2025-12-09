@@ -25,7 +25,7 @@ describe("Authentication API", () => {
     });
 
     expect(response.status).toBe(201);
-    const result = await response.json();
+    const result = await response.json() as any;
     expect(result.success).toBe(true);
     expect(result.user).toBeDefined();
     expect(result.token).toBeDefined();
@@ -46,7 +46,7 @@ describe("Authentication API", () => {
     });
 
     expect(loginResponse.status).toBe(200);
-    const loginResult = await loginResponse.json();
+    const loginResult = await loginResponse.json() as any;
     expect(loginResult.success).toBe(true);
     expect(loginResult.token).toBeDefined();
   }, TEST_TIMEOUTS.MEDIUM);
@@ -58,7 +58,7 @@ describe("Authentication API", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(userData)
     });
-    const signupResult = await signupResponse.json();
+    const signupResult = await signupResponse.json() as any;
     const userId = signupResult.user.id;
 
     // 2. Request Password Reset
@@ -69,7 +69,7 @@ describe("Authentication API", () => {
     });
 
     expect(forgotResponse.status).toBe(200);
-    const forgotResult = await forgotResponse.json();
+    const forgotResult = await forgotResponse.json() as any;
     expect(forgotResult.success).toBe(true);
 
     // 3. Find token in DB
@@ -91,7 +91,7 @@ describe("Authentication API", () => {
       })
     });
 
-    const resetResult = await resetResponse.json();
+    const resetResult = await resetResponse.json() as any;
     if (resetResponse.status !== 200) {
       console.log("Reset Password Failed Response:", JSON.stringify(resetResult, null, 2));
     }
@@ -107,7 +107,7 @@ describe("Authentication API", () => {
     });
 
     expect(loginResponse.status).toBe(200);
-    const loginResult = await loginResponse.json();
+    const loginResult = await loginResponse.json() as any;
     expect(loginResult.success).toBe(true);
   }, TEST_TIMEOUTS.MEDIUM);
 });
