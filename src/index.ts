@@ -4,15 +4,9 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
 import { getCookie } from "hono/cookie";
-import { html } from "hono/html";
 import { serveStatic } from "hono/bun";
 
 // Imports de tu lógica
-import { authRouter } from "./routers/auth";
-import { authSSR } from "./routers/auth_ssr";
-import { dashboard as dashboardRouter } from "./routers/dashboard"; // <--- IMPORT NUEVO
-import { usersRouter } from "./routers/users"; // Import users router
-import { genericApiRouter } from "./routers/generic-api"; // Import generic API router
 import { dbInitializer } from "./db";
 
 const app = new Hono();
@@ -42,9 +36,7 @@ try {
   // Serve static files from frontend build directory
   app.use("/frontend/*", serveStatic({ root: "./" }));
 
-  // 1. Rutas Públicas / Auth
-  app.route("/auth", authRouter);
-  app.route("/auth/ssr", authSSR);
+
 
   // 2. Middleware de Protección para el Dashboard
   app.use("/dashboard/*", async (c, next) => {
@@ -61,13 +53,6 @@ try {
     await next();
   });
 
-  // 3. Montar el Dashboard Genérico
-  app.route("/dashboard", dashboardRouter);
-
-  // API routes for SvelteKit frontend
-  app.route("/api", authRouter);
-  app.route("/api/users", usersRouter);
-  app.route("/api", genericApiRouter);
 
   // Roles and permissions routers not yet implemented
   // To be added when needed

@@ -1,32 +1,46 @@
 {
   "name": "openbauth-panel",
-  "module": "index.ts",
-  "type": "module",
-  "private": true,
+  "version": "1.0.0",
+  "description": "Sistema de autenticación y autorización con Bun y Hono",
+  "main": "src/index.ts",
   "scripts": {
-    "start": "bun ./src/index.ts",
-    "dev": "bun --watch ./src/index.ts",
-    "typecheck": "bunx tsc --noEmit",
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir=dist",
     "test": "bun test",
-    "test:unit": "bun test tests/api/unit",
-    "test:integration": "bun test tests/api/integration",
-    "test:performance": "bun test tests/api/performance",
-    "test:security": "bun test tests/api/security",
-    "test:all": "bun test tests/api",
-    "test:coverage": "bun test --coverage",
-    "setup:test-data": "bun run scripts/setup-test-data.ts"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+    "test:watch": "bun test --watch",
+    "db:seed": "bun run scripts/seed.ts",
+    "db:migrate": "bun run scripts/migrate.ts"
   },
   "dependencies": {
-    "@faker-js/faker": "^10.1.0",
-    "@hono/zod-validator": "^0.7.5",
-    "hono": "^4.10.7",
-    "open-bauth": "^1.4.0",
-    "zod": "^4.1.13"
-  }
+    "hono": "^3.12.0",
+    "@hono/node-server": "^1.3.1",
+    "zod": "^3.22.4",
+    "jsonwebtoken": "^9.0.2",
+    "bcrypt": "^5.1.1",
+    "nodemailer": "^6.9.7",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/bcrypt": "^5.0.2",
+    "@types/nodemailer": "^6.4.14",
+    "@types/node": "^20.10.5",
+    "typescript": "^5.3.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "authentication",
+    "authorization",
+    "bun",
+    "hono",
+    "oauth",
+    "jwt",
+    "rbac"
+  ],
+  "author": "OpenBauth Team",
+  "license": "MIT"
 }
