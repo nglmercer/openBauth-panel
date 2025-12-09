@@ -67,7 +67,7 @@ describe("ZodSchemaGenerator", () => {
 
   describe("create validator", () => {
     const validators = validateFromSchemas([testTableSchema]);
-    const tableValidators = validators[testTableSchema.tableName];
+    const tableValidators = validators[testTableSchema.tableName]!;
 
     it("should validate correct data for creation", () => {
       const validData = {
@@ -80,6 +80,9 @@ describe("ZodSchemaGenerator", () => {
       };
 
       const result = tableValidators.create.safeParse(validData);
+      if (!result.success) {
+        console.log("Validation errors:", result.error.format());
+      }
       expect(result.success).toBe(true);
     });
 
@@ -102,6 +105,12 @@ describe("ZodSchemaGenerator", () => {
       };
 
       const result = tableValidators.create.safeParse(invalidData);
+      if (result.success) {
+        console.log("Email validation failed - should reject invalid email");
+        console.log("Result:", result);
+      } else {
+        console.log("Email validation errors:", result.error.format());
+      }
       expect(result.success).toBe(false);
     });
 
@@ -144,7 +153,7 @@ describe("ZodSchemaGenerator", () => {
 
   describe("update validator", () => {
     const validators = validateFromSchemas([testTableSchema]);
-    const tableValidators = validators[testTableSchema.tableName];
+    const tableValidators = validators[testTableSchema.tableName]!;
 
     it("should allow partial updates", () => {
       const partialUpdate = {
@@ -211,7 +220,7 @@ describe("ZodSchemaGenerator", () => {
 
   describe("read validator", () => {
     const validators = validateFromSchemas([testTableSchema]);
-    const tableValidators = validators[testTableSchema.tableName];
+    const tableValidators = validators[testTableSchema.tableName]!;
 
     it("should validate all fields for reading", () => {
       const fullData = {
@@ -288,7 +297,7 @@ describe("ZodSchemaGenerator", () => {
       };
 
       const validators = validateFromSchemas([passwordSchema]);
-      const tableValidators = validators[passwordSchema.tableName];
+      const tableValidators = validators[passwordSchema.tableName]!;
 
       // Valid password should pass
       const validPassword = {
@@ -334,7 +343,7 @@ describe("ZodSchemaGenerator", () => {
       };
 
       const validators = validateFromSchemas([numericSchema]);
-      const tableValidators = validators[numericSchema.tableName];
+      const tableValidators = validators[numericSchema.tableName]!;
 
       // Numeric values should pass
       const numericData = {
@@ -384,7 +393,7 @@ describe("ZodSchemaGenerator", () => {
       };
 
       const validators = validateFromSchemas([booleanSchema]);
-      const tableValidators = validators[booleanSchema.tableName];
+      const tableValidators = validators[booleanSchema.tableName]!;
 
       // Boolean values should pass
       const booleanData = {

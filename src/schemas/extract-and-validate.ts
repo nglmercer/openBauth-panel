@@ -6,7 +6,6 @@ import type { TableSchema } from "open-bauth";
 const dbtemp = new Database(":memory:");
 const dbinitializer = new DatabaseInitializer({ database: dbtemp });
 await dbinitializer.initialize();
-const schemas = dbinitializer.getSchemas(); //:TableSchema[]
 /**
  * Función para extraer esquemas de una base de datos y generar validadores Zod
  */
@@ -69,6 +68,7 @@ function createZodValidatorFromTableSchema(
         zodType = z.number();
         break;
       case "TEXT":
+      case "VARCHAR":
         // Añadir validación especial para campos de email y contraseña
         if (column.name.toLowerCase().includes("email")) {
           zodType = z.string().email();
@@ -140,12 +140,37 @@ function createZodCreateValidatorFromTableSchema(
     switch (column.type) {
       case "INTEGER":
       case "SERIAL":
-        zodType = z.number().int();
+        zodType = z.union([
+          z.number().int(),
+          z.string().transform((val) => {
+            const num = parseInt(val, 10);
+            if (isNaN(num)) {
+              // En lugar de lanzar un error, devolver un valor que hará fallar la validación
+              return NaN;
+            }
+            return num;
+          }).refine((val) => !isNaN(val), {
+            message: "Must be a valid integer"
+          })
+        ]);
         break;
       case "REAL":
-        zodType = z.number();
+        zodType = z.union([
+          z.number(),
+          z.string().transform((val) => {
+            const num = parseFloat(val);
+            if (isNaN(num)) {
+              // En lugar de lanzar un error, devolver un valor que hará fallar la validación
+              return NaN;
+            }
+            return num;
+          }).refine((val) => !isNaN(val), {
+            message: "Must be a valid number"
+          })
+        ]);
         break;
       case "TEXT":
+      case "VARCHAR":
         // Añadir validación especial para campos de email y contraseña
         if (column.name.toLowerCase().includes("email")) {
           zodType = z.string().email();
@@ -156,7 +181,14 @@ function createZodCreateValidatorFromTableSchema(
         }
         break;
       case "BOOLEAN":
-        zodType = z.boolean();
+        zodType = z.union([
+          z.boolean(),
+          z.string().transform((val) => {
+            if (val === "true" || val === "1") return true;
+            if (val === "false" || val === "0") return false;
+            throw new Error("Invalid boolean value");
+          })
+        ]);
         break;
       case "DATETIME":
         zodType = z.string().datetime({ offset: true });
@@ -170,12 +202,13 @@ function createZodCreateValidatorFromTableSchema(
     }
 
     // Para crear, omitir campos con valores por defecto generados automáticamente
-    // como IDs con funciones como lower(hex(randomblob(16))) o CURRENT_TIMESTAMP
+    // como IDs con autoincremento, funciones como lower(hex(randomblob(16))) o CURRENT_TIMESTAMP
     if (
-      column.defaultValue !== undefined &&
-      (column.defaultValue === "CURRENT_TIMESTAMP" ||
-        (typeof column.defaultValue === "string" &&
-          column.defaultValue.includes("randomblob")))
+      column.autoIncrement ||
+      (column.defaultValue !== undefined &&
+        (column.defaultValue === "CURRENT_TIMESTAMP" ||
+          (typeof column.defaultValue === "string" &&
+            column.defaultValue.includes("randomblob"))))
     ) {
       continue; // Omitir este campo
     }
@@ -245,6 +278,7 @@ function createZodUpdateValidatorFromTableSchema(
         zodType = z.number();
         break;
       case "TEXT":
+      case "VARCHAR":
         // Añadir validación especial para campos de email y contraseña
         if (column.name.toLowerCase().includes("email")) {
           zodType = z.string().email();
