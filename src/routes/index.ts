@@ -14,9 +14,9 @@ import { defaultLogger } from "../utils/logger";
 import { authRoutes } from "./auth";
 import { userRoutes } from "./user";
 import { oauthRoutes } from "./oauth";
-// import { adminRoutes } from "./admin";
+import { adminRoutes } from "./admin";
 import { genericRoutes } from "./generic";
-// import { uploadRoutes } from "./upload";
+import { uploadRoutes } from "./upload";
 
 // Initialize services
 const factory = getServiceFactory();
@@ -120,14 +120,14 @@ app.get("/docs", (c) => {
 app.route("/auth", authRoutes);
 app.route("/user", userRoutes);
 app.route("/oauth", oauthRoutes);
-// app.route("/admin", adminRoutes);
+app.route("/admin", adminRoutes);
 app.route("/data", genericRoutes);
-// app.route("/upload", uploadRoutes);
+app.route("/upload", uploadRoutes);
 
 // Error handling middleware
 app.onError((err, c) => {
   defaultLogger.error("Unhandled error", err);
-  
+
   return c.json({
     error: "Internal server error",
     message: process.env.NODE_ENV === "development" ? err.message : "Something went wrong",
@@ -151,7 +151,7 @@ app.use("/frontend/*", serveStatic({ root: "./" }));
 // Dashboard protection
 app.use("/dashboard/*", async (c, next) => {
   const token = getCookie(c, "access_token");
-  
+
   if (!token) {
     // For API calls, return 401
     if (c.req.header("authorization")) {
@@ -160,14 +160,14 @@ app.use("/dashboard/*", async (c, next) => {
     // For browser requests, redirect to login
     return c.redirect("/auth/ssr/login");
   }
-  
+
   // Verify token
   try {
     const payload = await services.jwtService.verifyToken(token);
     if (!payload) {
       return c.json({ error: "Invalid token" }, 401);
     }
-    
+
     (c as any).set('user', payload);
     await next();
     return;

@@ -14,7 +14,8 @@ const authService = new AuthService(dbInitializer, jwtService);
 const permissionService = new PermissionService(dbInitializer);
 const oauthSchemas = getOAuthSchemas();
 
-// Register OAuth schemas only for now
-dbInitializer.registerSchemas(oauthSchemas);
+// Register OAuth schemas and verification tokens
+import { verificationTokenSchema } from "./database/schema/verification-token";
+dbInitializer.registerSchemas([...oauthSchemas, verificationTokenSchema]);
 
 export { db, dbInitializer, jwtService, authService, permissionService };

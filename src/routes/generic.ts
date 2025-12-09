@@ -45,7 +45,7 @@ function getController(tableName: string): BaseController {
 // Middleware to validate table name and create controller
 genericData.use("/:tableName/*", async (c, next) => {
   const tableName = c.req.param("tableName");
-  
+
   // Check if it's a system table
   // if (isSystemTable(tableName)) {
   //   return c.json({
@@ -53,11 +53,11 @@ genericData.use("/:tableName/*", async (c, next) => {
   //     error: "Access to system tables is forbidden"
   //   }, 403);
   // }
-  
+
   try {
     // Store table name in context
     (c as any).tableName = tableName;
-    
+
     // Log access for audit
     const auth = (c as any).auth;
     const userId = auth?.user?.id || 'anonymous';
@@ -66,7 +66,7 @@ genericData.use("/:tableName/*", async (c, next) => {
       userAgent: c.req.header('user-agent') || '',
       statusCode: 200
     });
-    
+
     await next();
     return; // Explicit return to satisfy TypeScript
   } catch (error) {
@@ -82,30 +82,26 @@ genericData.use("/:tableName/*", async (c, next) => {
 genericData.get("/:tableName/schema", async (c) => {
   try {
     const tableName = (c as any).tableName;
-    
-    // For now, return a basic schema response
-    // In a real implementation, you would extract this from the database
-    const schema = {
-      tableName: tableName,
-      columns: [
-        { name: "id", type: "TEXT", primaryKey: true, nullable: false },
-        { name: "created_at", type: "DATETIME", nullable: false },
-        { name: "updated_at", type: "DATETIME", nullable: false }
-      ],
-      indexes: [],
-      foreignKeys: []
-    };
-    
-    return c.json({ 
-      success: true, 
-      schema 
+
+    // Import dynamically to avoid circular dependencies if any
+    const { getSchemas } = await import("../database/base-controller");
+    const allSchemas = await getSchemas();
+    const tableSchema = allSchemas.find((s: any) => s.tableName === tableName);
+
+    if (!tableSchema) {
+      return c.json({ success: false, error: "Schema not found for table" }, 404);
+    }
+
+    return c.json({
+      success: true,
+      schema: tableSchema
     });
-    
+
   } catch (error) {
     defaultLogger.error("Schema retrieval error", error as Error);
-    return c.json({ 
-      success: false, 
-      error: "Failed to retrieve table schema" 
+    return c.json({
+      success: false,
+      error: "Failed to retrieve table schema"
     }, 500);
   }
 });
@@ -116,10 +112,10 @@ genericData.get("/:tableName", async (c) => {
     const tableName = (c as any).tableName;
     const controller = getController(tableName);
     const query = c.req.query();
-    
+
     // Parse and validate query parameters
     const validated = querySchema.parse(query);
-    
+
     // Build filter from query parameters (excluding pagination params)
     const filters: Record<string, any> = {};
     Object.entries(query).forEach(([key, value]) => {
@@ -132,33 +128,33 @@ genericData.get("/:tableName", async (c) => {
         }
       }
     });
-    
+
     // Pagination
     const page = validated.page || 1;
     const limit = Math.min(validated.limit || 20, 100); // Max 100 items per page
     const offset = (page - 1) * limit;
-    
+
     // Build options
     const options: any = {
       limit,
       offset,
       where: Object.keys(filters).length > 0 ? filters : undefined
     };
-    
+
     // Sorting
     if (validated.sort) {
       options.orderBy = validated.sort;
       options.order = validated.order || 'asc';
     }
-    
+
     // Field selection
     if (validated.fields) {
       options.select = validated.fields.split(',').map(f => f.trim());
     }
-    
+
     // Execute query
     const result = await controller.findAll(options);
-    
+
     // Add pagination metadata
     const response = {
       success: true,
@@ -172,22 +168,22 @@ genericData.get("/:tableName", async (c) => {
         hasPrev: page > 1
       }
     };
-    
+
     return c.json(response);
-    
+
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return c.json({ 
-        success: false, 
-        error: "Invalid query parameters", 
-        details: error.errors 
+      return c.json({
+        success: false,
+        error: "Invalid query parameters",
+        details: error.errors
       }, 400);
     }
-    
+
     defaultLogger.error("List records error", error as Error);
-    return c.json({ 
-      success: false, 
-      error: "Failed to retrieve records" 
+    return c.json({
+      success: false,
+      error: "Failed to retrieve records"
     }, 500);
   }
 });
@@ -198,26 +194,26 @@ genericData.get("/:tableName/:id", async (c) => {
     const tableName = (c as any).tableName;
     const controller = getController(tableName);
     const id = c.req.param("id");
-    
+
     const result = await controller.findById(id);
-    
+
     if (!result.success || !result.data) {
-      return c.json({ 
-        success: false, 
-        error: "Record not found" 
+      return c.json({
+        success: false,
+        error: "Record not found"
       }, 404);
     }
-    
-    return c.json({ 
-      success: true, 
-      data: result.data 
+
+    return c.json({
+      success: true,
+      data: result.data
     });
-    
+
   } catch (error) {
     defaultLogger.error("Get record error", error as Error);
-    return c.json({ 
-      success: false, 
-      error: "Failed to retrieve record" 
+    return c.json({
+      success: false,
+      error: "Failed to retrieve record"
     }, 500);
   }
 });
@@ -229,16 +225,16 @@ genericData.post("/:tableName", async (c) => {
     const controller = getController(tableName);
     const body = await c.req.json();
     const validated = createSchema.parse(body);
-    
+
     const result = await controller.create(validated.data);
-    
+
     if (!result.success) {
-      return c.json({ 
-        success: false, 
-        error: result.error || "Failed to create record" 
+      return c.json({
+        success: false,
+        error: result.error || "Failed to create record"
       }, 400);
     }
-    
+
     // Log creation for audit
     const auth = (c as any).auth;
     const userId = auth?.user?.id || 'anonymous';
@@ -247,25 +243,25 @@ genericData.post("/:tableName", async (c) => {
       userAgent: c.req.header('user-agent') || '',
       statusCode: 201
     });
-    
-    return c.json({ 
-      success: true, 
-      data: result.data 
+
+    return c.json({
+      success: true,
+      data: result.data
     }, 201);
-    
+
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return c.json({ 
-        success: false, 
-        error: "Invalid request data", 
-        details: error.errors 
+      return c.json({
+        success: false,
+        error: "Invalid request data",
+        details: error.errors
       }, 400);
     }
-    
+
     defaultLogger.error("Create record error", error as Error);
-    return c.json({ 
-      success: false, 
-      error: "Failed to create record" 
+    return c.json({
+      success: false,
+      error: "Failed to create record"
     }, 500);
   }
 });
@@ -278,16 +274,16 @@ genericData.put("/:tableName/:id", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json();
     const validated = updateSchema.parse(body);
-    
+
     const result = await controller.update(id, validated.data);
-    
+
     if (!result.success) {
-      return c.json({ 
-        success: false, 
-        error: result.error || "Failed to update record" 
+      return c.json({
+        success: false,
+        error: result.error || "Failed to update record"
       }, 400);
     }
-    
+
     // Log update for audit
     const auth = (c as any).auth;
     const userId = auth?.user?.id || 'anonymous';
@@ -296,25 +292,25 @@ genericData.put("/:tableName/:id", async (c) => {
       userAgent: c.req.header('user-agent') || '',
       statusCode: 200
     });
-    
-    return c.json({ 
-      success: true, 
-      data: result.data 
+
+    return c.json({
+      success: true,
+      data: result.data
     });
-    
+
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return c.json({ 
-        success: false, 
-        error: "Invalid request data", 
-        details: error.errors 
+      return c.json({
+        success: false,
+        error: "Invalid request data",
+        details: error.errors
       }, 400);
     }
-    
+
     defaultLogger.error("Update record error", error as Error);
-    return c.json({ 
-      success: false, 
-      error: "Failed to update record" 
+    return c.json({
+      success: false,
+      error: "Failed to update record"
     }, 500);
   }
 });
@@ -325,16 +321,16 @@ genericData.delete("/:tableName/:id", async (c) => {
     const tableName = (c as any).tableName;
     const controller = getController(tableName);
     const id = c.req.param("id");
-    
+
     const result = await controller.delete(id);
-    
+
     if (!result.success) {
-      return c.json({ 
-        success: false, 
-        error: result.error || "Failed to delete record" 
+      return c.json({
+        success: false,
+        error: result.error || "Failed to delete record"
       }, 400);
     }
-    
+
     // Log deletion for audit
     const auth = (c as any).auth;
     const userId = auth?.user?.id || 'anonymous';
@@ -343,17 +339,17 @@ genericData.delete("/:tableName/:id", async (c) => {
       userAgent: c.req.header('user-agent') || '',
       statusCode: 200
     });
-    
-    return c.json({ 
-      success: true, 
-      message: "Record deleted successfully" 
+
+    return c.json({
+      success: true,
+      message: "Record deleted successfully"
     });
-    
+
   } catch (error) {
     defaultLogger.error("Delete record error", error as Error);
-    return c.json({ 
-      success: false, 
-      error: "Failed to delete record" 
+    return c.json({
+      success: false,
+      error: "Failed to delete record"
     }, 500);
   }
 });
@@ -365,25 +361,25 @@ genericData.post("/:tableName/bulk", async (c) => {
     const controller = getController(tableName);
     const body = await c.req.json();
     const validated = bulkSchema.parse(body);
-    
+
     // Validate each record
     for (const record of validated.records) {
       if (!record || typeof record !== 'object') {
-        return c.json({ 
-          success: false, 
-          error: "Invalid record format" 
+        return c.json({
+          success: false,
+          error: "Invalid record format"
         }, 400);
       }
     }
-    
+
     // Perform bulk insert
     const results = await Promise.all(
       validated.records.map(record => controller.create(record))
     );
-    
+
     const successful = results.filter((r: any) => r.success);
     const failed = results.filter((r: any) => !r.success);
-    
+
     // Log bulk operation for audit
     const auth = (c as any).auth;
     const userId = auth?.user?.id || 'anonymous';
@@ -392,9 +388,9 @@ genericData.post("/:tableName/bulk", async (c) => {
       userAgent: c.req.header('user-agent') || '',
       statusCode: 200
     });
-    
-    return c.json({ 
-      success: true, 
+
+    return c.json({
+      success: true,
       results: {
         total: validated.records.length,
         successful: successful.length,
@@ -402,20 +398,20 @@ genericData.post("/:tableName/bulk", async (c) => {
         errors: failed.map((r: any, i: number) => ({ index: i, error: r.error }))
       }
     });
-    
+
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return c.json({ 
-        success: false, 
-        error: "Invalid request data", 
-        details: error.errors 
+      return c.json({
+        success: false,
+        error: "Invalid request data",
+        details: error.errors
       }, 400);
     }
-    
+
     defaultLogger.error("Bulk operation error", error as Error);
-    return c.json({ 
-      success: false, 
-      error: "Failed to perform bulk operation" 
+    return c.json({
+      success: false,
+      error: "Failed to perform bulk operation"
     }, 500);
   }
 });
@@ -426,7 +422,7 @@ genericData.get("/:tableName/count", async (c) => {
     const tableName = (c as any).tableName;
     const controller = getController(tableName);
     const query = c.req.query();
-    
+
     // Build filter from query parameters
     const filters: Record<string, any> = {};
     Object.entries(query).forEach(([key, value]) => {
@@ -438,19 +434,19 @@ genericData.get("/:tableName/count", async (c) => {
         }
       }
     });
-    
+
     const result = await controller.count(Object.keys(filters).length > 0 ? filters : undefined);
-    
-    return c.json({ 
-      success: true, 
-      count: result 
+
+    return c.json({
+      success: true,
+      count: result
     });
-    
+
   } catch (error) {
     defaultLogger.error("Count records error", error as Error);
-    return c.json({ 
-      success: false, 
-      error: "Failed to count records" 
+    return c.json({
+      success: false,
+      error: "Failed to count records"
     }, 500);
   }
 });
@@ -461,11 +457,11 @@ genericData.get("/:tableName/search", async (c) => {
     const tableName = (c as any).tableName;
     const controller = getController(tableName);
     const query = c.req.query();
-    
+
     // Parse search parameters
     const searchParams: any = {};
     const options: any = {};
-    
+
     Object.entries(query).forEach(([key, value]) => {
       if (key === 'q' || key === 'query') {
         searchParams.search = value;
@@ -486,20 +482,20 @@ genericData.get("/:tableName/search", async (c) => {
         }
       }
     });
-    
+
     const result = await controller.search(searchParams, options);
-    
-    return c.json({ 
-      success: true, 
+
+    return c.json({
+      success: true,
       data: result.data,
-      total: result.total 
+      total: result.total
     });
-    
+
   } catch (error) {
     defaultLogger.error("Search records error", error as Error);
-    return c.json({ 
-      success: false, 
-      error: "Failed to search records" 
+    return c.json({
+      success: false,
+      error: "Failed to search records"
     }, 500);
   }
 });

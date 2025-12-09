@@ -1,7 +1,7 @@
-import { 
-  DatabaseInitializer, 
-  JWTService, 
-  AuthService, 
+import {
+  DatabaseInitializer,
+  JWTService,
+  AuthService,
   PermissionService,
   OAuthService,
   SecurityService,
@@ -12,6 +12,7 @@ import { NotificationService } from './notification';
 import { AuditService } from './audit';
 import { RateLimitService } from './rate-limit';
 import { StorageService } from './storage';
+import { VerificationService } from './verification';
 
 // Service Factory for dependency injection and centralized service management
 export class ServiceFactory {
@@ -28,6 +29,7 @@ export class ServiceFactory {
   private _auditService?: AuditService;
   private _rateLimitService?: RateLimitService;
   private _storageService?: StorageService;
+  private _verificationService?: VerificationService;
 
   private constructor() {
     this._dbInitializer = dbInitializer;
@@ -56,8 +58,16 @@ export class ServiceFactory {
       notificationService: this.getNotificationService(),
       auditService: this.getAuditService(),
       rateLimitService: this.getRateLimitService(),
-      storageService: this.getStorageService()
+      storageService: this.getStorageService(),
+      verificationService: this.getVerificationService()
     };
+  }
+
+  getVerificationService(): VerificationService {
+    if (!this._verificationService) {
+      this._verificationService = new VerificationService(this._dbInitializer);
+    }
+    return this._verificationService;
   }
 
   // Lazy initialization of services
