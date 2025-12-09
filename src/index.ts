@@ -144,24 +144,24 @@ process.on("SIGTERM", async () => {
 export { app, initializeApp, services };
 
 // Start server if this file is run directly
-const port = parseInt(process.env['PORT'] || "3000");
+// Start server if this file is run directly
+if (import.meta.main) {
+  const port = parseInt(process.env['PORT'] || "3000");
 
-initializeApp()
-  .then(() => {
-    defaultLogger.info(`Starting server on port ${port}`);
+  initializeApp()
+    .then(() => {
+      // defaultLogger.info(`Starting server on port ${port}`);
 
-    Bun.serve({
-      port,
-      fetch: app.fetch
+      Bun.serve({
+        port,
+        fetch: app.fetch
+      });
+      defaultLogger.info(`server running on http://localhost:${port}/api/v1`);
+    })
+    .catch((error) => {
+      defaultLogger.error("Failed to start server", error);
+      process.exit(1);
     });
-
-    defaultLogger.info(`🚀 OpenBauth API server running on http://localhost:${port}/api/v1`);
-    defaultLogger.info("📚 API Documentation available at http://localhost:${port}/api/v1/docs");
-    defaultLogger.info("❤️  Health check at http://localhost:${port}/api/v1/health");
-  })
-  .catch((error) => {
-    defaultLogger.error("Failed to start server", error);
-    process.exit(1);
-  });
+}
 
 

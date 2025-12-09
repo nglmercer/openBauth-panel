@@ -1,13 +1,22 @@
-import { describe, test, expect, beforeEach } from "bun:test";
-import { initializeApp } from "../../src/index";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { initializeApp, app } from "../../src/index";
 import { testUtils, TEST_TIMEOUTS } from "../setup";
 
 describe("User API", () => {
     let baseUrl: string;
+    let server: any;
 
     beforeEach(async () => {
         await initializeApp();
-        baseUrl = "http://localhost:3000/api/v1";
+        server = Bun.serve({
+            port: 0,
+            fetch: app.fetch
+        });
+        baseUrl = `http://localhost:${server.port}/api/v1`;
+    });
+
+    afterEach(() => {
+        if (server) server.stop();
     });
 
     test("should retrieve user profile", async () => {

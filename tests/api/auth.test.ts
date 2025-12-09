@@ -1,18 +1,23 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { initializeApp } from "../../src/index";
+import { initializeApp, app } from "../../src/index";
 import { testUtils, TEST_TIMEOUTS } from "../setup";
 import { db } from "../../src/db";
 
 describe("Authentication API", () => {
   let baseUrl: string;
+  let server: any;
 
   beforeEach(async () => {
     await initializeApp();
-    baseUrl = "http://localhost:3000/api/v1";
+    server = Bun.serve({
+      port: 0,
+      fetch: app.fetch
+    });
+    baseUrl = `http://localhost:${server.port}/api/v1`;
   });
 
   afterEach(async () => {
-    // server cleanup handled by app
+    server.stop();
   });
 
   test("should register a new user successfully", async () => {

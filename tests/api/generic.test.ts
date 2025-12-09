@@ -1,10 +1,11 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { initializeApp } from "../../src/index";
+import { initializeApp, app } from "../../src/index";
 import { testUtils, TEST_TIMEOUTS } from "../setup";
 import { db } from "../../src/db";
 
 describe("Generic Data API", () => {
     let baseUrl: string;
+    let server: any;
 
     beforeEach(async () => {
         // Create table BEFORE app init to ensure it's picked up if cached, though dynamic fetch should work regardless
@@ -16,10 +17,15 @@ describe("Generic Data API", () => {
         )`);
 
         await initializeApp();
-        baseUrl = "http://localhost:3000/api/v1";
+        server = Bun.serve({
+            port: 0,
+            fetch: app.fetch
+        });
+        baseUrl = `http://localhost:${server.port}/api/v1`;
     });
 
     afterEach(() => {
+        if (server) server.stop();
         db.run("DROP TABLE IF EXISTS test_items");
     });
 
