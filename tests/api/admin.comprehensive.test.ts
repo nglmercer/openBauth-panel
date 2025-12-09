@@ -37,8 +37,8 @@ describe("Admin API - Comprehensive Tests", () => {
 
         // Create admin role if it doesn't exist
         const roleController = services.dbInitializer.createController("roles");
-        let adminRole = await roleController.search({ name: "admin" });
-        if (!adminRole || adminRole.data.length === 0) {
+        let adminRole: any = await roleController.search({ name: "admin" });
+        if (!adminRole || !adminRole.data || adminRole.data.length === 0) {
             adminRole = await roleController.create({
                 id: crypto.randomUUID(),
                 name: "admin",

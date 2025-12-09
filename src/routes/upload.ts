@@ -18,7 +18,7 @@ const uploadMiddleware = createFileUploadMiddleware(services.storageService, {
 // POST /api/v1/upload
 upload.post("/", authMiddleware, uploadMiddleware, async (c) => {
     try {
-        const files = c.get('uploadedFiles') as any[];
+        const files = (c as any).get('uploadedFiles') as any[];
 
         if (!files || files.length === 0) {
             return c.json({ success: false, error: "No files uploaded" }, 400);

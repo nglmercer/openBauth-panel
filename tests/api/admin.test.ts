@@ -60,7 +60,7 @@ describe("Admin API", () => {
         await userRolesController.create({
             id: crypto.randomUUID(),
             user_id: adminSignupResult.user.id,
-            role_id: adminRole.data?.id || adminRole.id
+            role_id: (adminRole.data as any)?.id
         });
     }, TEST_TIMEOUTS.LONG);
 
@@ -213,7 +213,7 @@ describe("Admin API", () => {
                 },
                 body: JSON.stringify(roleData)
             });
-            const createRoleResult = await createRoleResponse.json() as any;
+            await createRoleResponse.json();
 
             // Create a test user
             const userData = testUtils.generateTestUser();

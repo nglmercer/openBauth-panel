@@ -195,7 +195,7 @@ describe("Main API Endpoints", () => {
             const responses = await Promise.all(requests);
 
             // Check if at least one request was rate limited
-            const rateLimitedResponses = responses.filter(r => r.status === 429);
+            // const rateLimitedCount = responses.filter(r => r.status === 429).length;
 
             // The rate limit middleware should kick in after a certain threshold
             // This test verifies the middleware is active (may or may not be triggered depending on limits)

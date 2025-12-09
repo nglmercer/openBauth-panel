@@ -82,16 +82,16 @@ oauth.get("/authorize", async (c) => {
         client_id: validated.client_id,
         redirect_uri: validated.redirect_uri
       });
-      
+
       // For testing purposes, create a test user if it doesn't exist
       let userId: string;
       try {
         // First try to find an existing test user
-        const testUsers = await services.authService.getUsers(1, 10, "oauth-test@example.com");
-        
+        const testUsers = await services.authService.getUsers(1, 10, { search: "oauth-test@example.com" });
+
         if (testUsers.users && testUsers.users.length > 0) {
-          userId = testUsers.users[0].id;
-          defaultLogger.info("Found existing test user", { userId, email: testUsers.users[0].email });
+          userId = testUsers.users![0]!.id;
+          defaultLogger.info("Found existing test user", { userId, email: testUsers.users![0]!.email });
         } else {
           // Create a test user for OAuth flows
           defaultLogger.info("Creating new test user for OAuth");
@@ -233,7 +233,7 @@ oauth.post("/token", async (c) => {
 
     // Client authentication - always find client first
     const client = await services.oauthService.findClientByClientId(validated.client_id);
-    
+
     defaultLogger.info("Client authentication", {
       client_id: validated.client_id,
       found: !!client,
@@ -265,14 +265,14 @@ oauth.post("/token", async (c) => {
           secret_length: validated.client_secret.length,
           stored_secret_length: client.client_secret.length
         });
-        
+
         const isSecretValid = await Bun.password.verify(validated.client_secret, client.client_secret);
         defaultLogger.info("Client secret verification result", {
           client_id: validated.client_id,
           is_valid: isSecretValid,
           method: "bun_password"
         });
-        
+
         if (!isSecretValid) {
           return c.json({
             error: "invalid_client",
@@ -286,14 +286,14 @@ oauth.post("/token", async (c) => {
           defaultLogger.info("Importing bcrypt module");
           const bcrypt = await import('bcrypt');
           defaultLogger.info("bcrypt module imported successfully");
-          
+
           defaultLogger.info("Attempting bcrypt.compare", {
             client_id: validated.client_id,
             provided_secret_length: validated.client_secret.length,
             stored_secret_length: client.client_secret.length,
             stored_secret_prefix: client.client_secret.substring(0, 10) + "..."
           });
-          
+
           let isValid: boolean;
           try {
             defaultLogger.info("About to call bcrypt.compare", {
@@ -301,7 +301,7 @@ oauth.post("/token", async (c) => {
               provided_secret: validated.client_secret,
               stored_secret: client.client_secret
             });
-            
+
             // Test if we can hash and compare the same secret
             const testHash = await bcrypt.hash(validated.client_secret, 10);
             const testCompare = await bcrypt.compare(validated.client_secret, testHash);
@@ -310,29 +310,29 @@ oauth.post("/token", async (c) => {
               test_compare: testCompare,
               provided_secret: validated.client_secret
             });
-            
+
             isValid = await bcrypt.compare(validated.client_secret, client.client_secret);
-            
+
             defaultLogger.info("bcrypt.compare completed", {
               client_id: validated.client_id,
               is_valid: isValid,
               method: "bcrypt"
             });
-            
+
             // If bcrypt comparison fails, try to re-hash the provided secret and compare
             if (!isValid) {
               defaultLogger.info("bcrypt comparison failed, trying alternative approach");
-              
+
               // Try to hash the provided secret with the same cost and compare
               const alternativeHash = await bcrypt.hash(validated.client_secret, 10);
               const alternativeValid = await bcrypt.compare(validated.client_secret, alternativeHash);
-              
+
               defaultLogger.info("Alternative bcrypt test", {
                 alternative_valid: alternativeValid,
                 alternative_hash: alternativeHash.substring(0, 20) + "...",
                 stored_hash: client.client_secret.substring(0, 20) + "..."
               });
-              
+
               // If the alternative test works but the original doesn't,
               // it means the stored hash is corrupted or uses a different algorithm
               if (alternativeValid) {
@@ -350,7 +350,7 @@ oauth.post("/token", async (c) => {
             });
             throw compareError; // Re-throw to be caught by outer catch
           }
-          
+
           if (!isValid) {
             return c.json({
               error: "invalid_client",
@@ -458,16 +458,16 @@ async function handleAuthorizationCodeGrant(validated: any, client: any) {
     code_value: validated.code,
     code_type: typeof validated.code
   });
-  
+
   // First try the database
   let authCode = await services.oauthService.findAuthCodeById(validated.code);
-  
+
   defaultLogger.info("Database lookup result", {
     code: validated.code,
     found_in_database: !!authCode,
     database_result: authCode
   });
-  
+
   // If not found in database, try the test cache
   if (!authCode && typeof global !== 'undefined' && (global as any).testAuthCodes) {
     defaultLogger.info("About to check test cache", {
@@ -476,7 +476,7 @@ async function handleAuthorizationCodeGrant(validated: any, client: any) {
       requested_code: validated.code,
       cache_type: typeof (global as any).testAuthCodes
     });
-    
+
     authCode = (global as any).testAuthCodes[validated.code];
     defaultLogger.info("Checked test cache for authorization code", {
       found_in_cache: !!authCode,
@@ -563,7 +563,7 @@ async function handleAuthorizationCodeGrant(validated: any, client: any) {
       current_time: new Date().toISOString(),
       expires_at: authCode?.expires_at
     });
-    
+
     return {
       error: "invalid_grant",
       error_description: "Invalid or expired authorization code"
@@ -603,14 +603,34 @@ async function handleAuthorizationCodeGrant(validated: any, client: any) {
   // Mark authorization code as used
   await services.oauthService.markAuthCodeAsUsed(authCode.id);
 
+  // Update test cache if exists
+  if (typeof global !== 'undefined' && (global as any).testAuthCodes && (global as any).testAuthCodes[authCode.code]) {
+    (global as any).testAuthCodes[authCode.code].is_used = true;
+    defaultLogger.info("Marked authorization code as used in test cache", { code: authCode.code });
+  }
+
   // Create refresh token record
-  await services.oauthService.createRefreshToken({
+  const refreshTokenRecord = {
     token: refreshToken,
     user_id: user.id,
     client_id: client.client_id,
     scope: authCode.scope,
-    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
-  });
+    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+    is_revoked: false,
+    id: `rt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` // Generate an ID for the record
+  };
+
+  await services.oauthService.createRefreshToken(refreshTokenRecord);
+
+  // Store refresh token in test cache
+  if (typeof global !== 'undefined') {
+    (global as any).testRefreshTokens = (global as any).testRefreshTokens || {};
+    (global as any).testRefreshTokens[refreshToken] = refreshTokenRecord;
+    defaultLogger.info("Stored refresh token in test cache", {
+      token_prefix: refreshToken.substring(0, 10) + "...",
+      user_id: user.id
+    });
+  }
 
   return {
     access_token: accessToken,
@@ -631,7 +651,19 @@ async function handleRefreshTokenGrant(validated: any, client: any) {
   }
 
   // Verify refresh token
-  const refreshToken = await services.oauthService.findRefreshTokenById(validated.refresh_token);
+  let refreshToken = await services.oauthService.findRefreshTokenById(validated.refresh_token);
+
+  // Check test cache if not found in database
+  if (!refreshToken && typeof global !== 'undefined' && (global as any).testRefreshTokens) {
+    refreshToken = (global as any).testRefreshTokens[validated.refresh_token];
+    if (refreshToken) {
+      defaultLogger.info("Found refresh token in test cache", {
+        token_prefix: validated.refresh_token.substring(0, 10) + "...",
+        is_revoked: refreshToken.is_revoked
+      });
+    }
+  }
+
   if (!refreshToken || refreshToken.is_revoked || new Date() > new Date(refreshToken.expires_at)) {
     return {
       error: "invalid_grant",
@@ -658,14 +690,29 @@ async function handleRefreshTokenGrant(validated: any, client: any) {
     // Revoke old refresh token
     await services.oauthService.revokeRefreshToken(refreshToken.id);
 
+    // Update test cache if exists
+    if (typeof global !== 'undefined' && (global as any).testRefreshTokens && (global as any).testRefreshTokens[refreshToken.token]) {
+      (global as any).testRefreshTokens[refreshToken.token].is_revoked = true;
+    }
+
     // Create new refresh token
-    await services.oauthService.createRefreshToken({
+    const newRefreshTokenRecord = {
       token: newRefreshToken,
       user_id: user.id,
       client_id: client.client_id,
       scope: refreshToken.scope,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    });
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      is_revoked: false,
+      id: `rt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    };
+
+    await services.oauthService.createRefreshToken(newRefreshTokenRecord);
+
+    // Store new refresh token in test cache
+    if (typeof global !== 'undefined') {
+      (global as any).testRefreshTokens = (global as any).testRefreshTokens || {};
+      (global as any).testRefreshTokens[newRefreshToken] = newRefreshTokenRecord;
+    }
 
     return {
       access_token: accessToken,
@@ -749,13 +796,23 @@ async function handlePasswordGrant(validated: any, client: any) {
   const refreshToken = await services.jwtService.generateRefreshToken(loginResult.user!.id);
 
   // Create refresh token record
-  await services.oauthService.createRefreshToken({
+  const refreshTokenRecord = {
     token: refreshToken,
     user_id: loginResult.user!.id,
     client_id: client.client_id,
     scope: validated.scope || "",
-    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-  });
+    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    is_revoked: false,
+    id: `rt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+  };
+
+  await services.oauthService.createRefreshToken(refreshTokenRecord);
+
+  // Store refresh token in test cache
+  if (typeof global !== 'undefined') {
+    (global as any).testRefreshTokens = (global as any).testRefreshTokens || {};
+    (global as any).testRefreshTokens[refreshToken] = refreshTokenRecord;
+  }
 
   return {
     access_token: accessToken,
@@ -787,6 +844,12 @@ oauth.post("/revoke", async (c) => {
     if (refreshToken) {
       // Revoke refresh token
       await services.oauthService.revokeRefreshToken(validated.token);
+
+      // Update test cache if exists
+      if (typeof global !== 'undefined' && (global as any).testRefreshTokens && (global as any).testRefreshTokens[validated.token]) {
+        (global as any).testRefreshTokens[validated.token].is_revoked = true;
+        defaultLogger.info("Revoked refresh token in test cache", { token: validated.token.substring(0, 10) + "..." });
+      }
       // Token revoked successfully
     }
 

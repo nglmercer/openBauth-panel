@@ -121,7 +121,7 @@ admin.post("/users/:id/roles", async (c) => {
         const userRolesController = services.dbInitializer.createController("user_roles");
         const existingAssignmentResult = await userRolesController.findFirst({
             user_id: userId,
-            role_id: role.id
+            role_id: role['id']
         });
         if (existingAssignmentResult?.data) {
             return c.json({ success: true, message: "Role already assigned" });
@@ -131,7 +131,7 @@ admin.post("/users/:id/roles", async (c) => {
         const result = await userRolesController.create({
             id: crypto.randomUUID(),
             user_id: userId,
-            role_id: role.id
+            role_id: role['id']
         });
 
         return c.json(result);
