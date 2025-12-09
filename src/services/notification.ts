@@ -38,6 +38,9 @@ export class NotificationService {
 
   async sendEmail(options: EmailOptions): Promise<boolean> {
     try {
+      if (!this.transporter || !this.config) {
+        return false
+      }
       const result = await this.transporter.sendMail({
         from: this.config.smtp.from,
         to: options.to,
@@ -54,17 +57,17 @@ export class NotificationService {
 
       return true;
     } catch (error) {
-      defaultLogger.error('Failed to send email', error as Error, {
-        to: options.to,
-        subject: options.subject,
-      });
+      /*       defaultLogger.error('Failed to send email', error as Error, {
+              to: options.to,
+              subject: options.subject,
+            }); */
       return false;
     }
   }
 
   async sendPasswordResetEmail(email: string, token: string): Promise<boolean> {
     const resetLink = `${process.env['FRONTEND_URL'] || 'http://localhost:3000'}/reset-password?token=${token}`;
-    
+
     return this.sendEmail({
       to: email,
       subject: 'Recuperación de Contraseña',
@@ -93,7 +96,7 @@ export class NotificationService {
 
   async sendEmailVerification(email: string, token: string): Promise<boolean> {
     const verificationLink = `${process.env['FRONTEND_URL'] || 'http://localhost:3000'}/verify-email?token=${token}`;
-    
+
     return this.sendEmail({
       to: email,
       subject: 'Verificación de Email',

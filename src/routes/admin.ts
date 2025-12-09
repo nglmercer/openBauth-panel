@@ -90,6 +90,11 @@ admin.post("/users/:id/roles", async (c) => {
         const userId = c.req.param("id");
         const body = await c.req.json();
 
+        // Validate that role is provided
+        if (!body.role) {
+            return c.json({ success: false, error: "Role is required" }, 400);
+        }
+
         // Use schema to validate
         const validated = assignRoleSchema.parse({
             userId,
@@ -97,22 +102,45 @@ admin.post("/users/:id/roles", async (c) => {
         });
         const roleName = validated.role;
 
-        // This would typically involve inserting into user_roles table
-        // Or using helper service
-        // Let's assume user_roles table
+        // Find the user first
+        const userController = services.dbInitializer.createController("users");
+        const userResult = await userController.findFirst({ id: userId });
+        if (!userResult?.data) {
+            return c.json({ success: false, error: "User not found" }, 404);
+        }
+
+        // Find the role by name to get its ID
+        const roleController = services.dbInitializer.createController("roles");
+        const roleResult = await roleController.findFirst({ name: roleName });
+        if (!roleResult?.data) {
+            return c.json({ success: false, error: "Role not found" }, 404);
+        }
+        const role = roleResult.data;
+
+        // Check if user already has this role
         const userRolesController = services.dbInitializer.createController("user_roles");
-
-        // Find role id? For now assuming simple string role or name based.
-        // If we need ID, we'd fetch role first.
-
-        const result = await userRolesController.create({
+        const existingAssignmentResult = await userRolesController.findFirst({
             user_id: userId,
-            role_name: roleName // or role_id
+            role_id: role.id
+        });
+        if (existingAssignmentResult?.data) {
+            return c.json({ success: true, message: "Role already assigned" });
+        }
+
+        // Create the user_role record with proper role_id
+        const result = await userRolesController.create({
+            id: crypto.randomUUID(),
+            user_id: userId,
+            role_id: role.id
         });
 
         return c.json(result);
 
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            return c.json({ success: false, error: "Validation error", details: error.errors }, 400);
+        }
+        defaultLogger.error("Assign role error", error as Error);
         return c.json({ success: false, error: "Failed to assign role" }, 500);
     }
 });

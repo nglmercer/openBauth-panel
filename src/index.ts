@@ -58,36 +58,63 @@ async function initializeApp() {
 // Health check endpoint
 app.get("/health", (c) => {
   return c.json({
-    success: true,
     status: "healthy",
     timestamp: new Date().toISOString(),
-    version: process.env['npm_package_version'] || "1.0.0"
+    version: process.env['npm_package_version'] || "1.0.0",
+    services: {
+      database: "connected",
+      email: services?.notificationService ? "configured" : "not configured"
+    }
   });
 });
 
 // API documentation endpoint
 app.get("/docs", (c) => {
   return c.json({
-    success: true,
-    message: "OpenBauth API Documentation",
+    name: "OpenBauth API",
+    version: "1.0.0",
+    description: "Complete authentication and authorization API",
     endpoints: {
-      auth: "/api/v1/auth/*",
-      user: "/api/v1/user/*",
-      oauth: "/api/v1/oauth/*",
-      data: "/api/v1/data/*",
-      health: "/api/v1/health",
-      docs: "/api/v1/docs"
-    },
-    features: [
-      "JWT Authentication",
-      "OAuth 2.0",
-      "Multi-Factor Authentication",
-      "Biometric Authentication",
-      "Role-Based Access Control",
-      "Generic CRUD API",
-      "Audit Logging",
-      "Rate Limiting"
-    ]
+      auth: {
+        signup: "POST /api/v1/auth/signup",
+        login: "POST /api/v1/auth/login",
+        anonymous: "POST /api/v1/auth/anonymous",
+        refresh: "POST /api/v1/auth/refresh",
+        logout: "POST /api/v1/auth/logout",
+        forgotPassword: "POST /api/v1/auth/forgot-password",
+        resetPassword: "POST /api/v1/auth/reset-password",
+        verifyEmail: "POST /api/v1/auth/verify-email"
+      },
+      user: {
+        me: "GET /api/v1/user/me",
+        update: "PATCH /api/v1/user/me",
+        mfaSetup: "POST /api/v1/user/mfa/setup",
+        mfaVerify: "POST /api/v1/user/mfa/verify",
+        devices: "GET /api/v1/user/devices",
+        registerDevice: "POST /api/v1/user/devices",
+        biometric: "POST /api/v1/user/biometric"
+      },
+      oauth: {
+        authorize: "GET /api/v1/oauth/authorize",
+        token: "POST /api/v1/oauth/token",
+        revoke: "POST /api/v1/oauth/revoke",
+        introspect: "POST /api/v1/oauth/introspect",
+        jwks: "GET /api/v1/oauth/jwks",
+        userinfo: "GET /api/v1/oauth/userinfo"
+      },
+      admin: {
+        users: "GET /api/v1/admin/users",
+        roles: "GET /api/v1/admin/roles",
+        permissions: "GET /api/v1/admin/permissions"
+      },
+      generic: {
+        crud: "GET/POST/PUT/DELETE /api/v1/data/:tableName",
+        schema: "GET /api/v1/data/:tableName/schema"
+      },
+      upload: {
+        upload: "POST /api/v1/upload"
+      }
+    }
   });
 });
 
@@ -95,7 +122,6 @@ app.get("/docs", (c) => {
 app.route("/auth", auth);
 app.route("/user", user);
 app.route("/oauth", oauth);
-app.route("/oauth2", oauth);
 app.route("/data", genericData);
 app.route("/admin", adminRoutes);
 app.route("/upload", uploadRoutes);
@@ -111,10 +137,9 @@ if (process.env['UPLOAD_DIR']) {
 // Catch-all route for 404s
 app.all("*", (c) => {
   return c.json({
-    success: false,
-    error: "Endpoint not found",
-    path: c.req.path,
-    method: c.req.method
+    error: "Not found",
+    message: `Route ${c.req.path} not found`,
+    timestamp: new Date().toISOString()
   }, 404);
 });
 

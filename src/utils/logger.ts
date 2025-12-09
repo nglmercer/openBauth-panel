@@ -32,15 +32,15 @@ class Logger {
     const timestamp = new Date().toISOString();
     const levelName = LogLevel[level];
     let formatted = `[${timestamp}] [${levelName}] ${message}`;
-    
-    if (context) {
+
+    if (context && levelName === 'DEBUG') {
       formatted += ` | Context: ${JSON.stringify(context)}`;
     }
-    
+
     if (error) {
       formatted += ` | Error: ${error.message}\n${error.stack}`;
     }
-    
+
     return formatted;
   }
 
@@ -50,7 +50,7 @@ class Logger {
 
   private async logToDatabase(entry: LogEntry) {
     if (!this.db) return;
-    
+
     try {
       this.db.run(
         `INSERT INTO logs (timestamp, level, message, context, error_stack) 
@@ -70,7 +70,7 @@ class Logger {
 
   error(message: string, error?: Error, context?: any) {
     if (!this.shouldLog(LogLevel.ERROR)) return;
-    
+
     const entry: LogEntry = {
       timestamp: new Date(),
       level: LogLevel.ERROR,
@@ -78,49 +78,49 @@ class Logger {
       error,
       context
     };
-    
+
     console.error(this.formatMessage(LogLevel.ERROR, message, context, error));
     this.logToDatabase(entry);
   }
 
   warn(message: string, context?: any) {
     if (!this.shouldLog(LogLevel.WARN)) return;
-    
+
     const entry: LogEntry = {
       timestamp: new Date(),
       level: LogLevel.WARN,
       message,
       context
     };
-    
+
     console.warn(this.formatMessage(LogLevel.WARN, message, context));
     this.logToDatabase(entry);
   }
 
   info(message: string, context?: any) {
     if (!this.shouldLog(LogLevel.INFO)) return;
-    
+
     const entry: LogEntry = {
       timestamp: new Date(),
       level: LogLevel.INFO,
       message,
       context
     };
-    
+
     console.log(this.formatMessage(LogLevel.INFO, message, context));
     this.logToDatabase(entry);
   }
 
   debug(message: string, context?: any) {
     if (!this.shouldLog(LogLevel.DEBUG)) return;
-    
+
     const entry: LogEntry = {
       timestamp: new Date(),
       level: LogLevel.DEBUG,
       message,
       context
     };
-    
+
     console.log(this.formatMessage(LogLevel.DEBUG, message, context));
     this.logToDatabase(entry);
   }

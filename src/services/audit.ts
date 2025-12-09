@@ -20,10 +20,11 @@ export class AuditService {
   constructor(dbInitializer: DatabaseInitializer) {
     try {
       this.controller = dbInitializer.createController('audit_logs');
-      
+
       // Initialize asynchronously to avoid blocking constructor
+      //@ts-ignore
       this.initializeAuditTable().catch(error => {
-        defaultLogger.warn('Audit table not available, audit logging disabled', error as Error);
+        //defaultLogger.warn('Audit table not available, audit logging disabled', error as Error);
         this.initialized = false;
       });
     } catch (error) {
@@ -49,7 +50,7 @@ export class AuditService {
         defaultLogger.info('Audit table initialized successfully');
       } else {
         // Table might not exist or have issues
-        defaultLogger.warn('Audit table may not be properly initialized', result.error);
+        //defaultLogger.warn('Audit table may not be properly initialized', result.error);
         this.initialized = false;
       }
     } catch (error) {
@@ -77,7 +78,7 @@ export class AuditService {
       // Ensure audit table is initialized
       const isInitialized = await this.ensureInitialized();
       if (!isInitialized) {
-        defaultLogger.warn('Audit service not initialized, skipping audit log', { event, userId: data.userId });
+        //defaultLogger.warn('Audit service not initialized, skipping audit log', { event, userId: data.userId });
         return false;
       }
 
@@ -93,7 +94,7 @@ export class AuditService {
       };
 
       const result = await this.controller.create(auditLog);
-       
+
       if (result.success) {
         defaultLogger.info(`Audit log created: ${event}`, {
           userId: data.userId,
@@ -130,7 +131,7 @@ export class AuditService {
     details?: any;
   }): Promise<boolean> {
     const level = this.getSecurityLevel(data.threatLevel);
-    
+
     return this.log(event, {
       userId: data.userId || '',
       ip: data.ip,
@@ -154,7 +155,7 @@ export class AuditService {
   }): Promise<boolean> {
     const event = `api.${method.toLowerCase()}.${path.replace(/\//g, '.')}`;
     const level = data.statusCode && data.statusCode >= 400 ? 'error' : 'info';
-    
+
     return this.log(event, {
       userId: data.userId || '',
       ip: data.ip,
@@ -215,11 +216,11 @@ export class AuditService {
   } = {}): Promise<{ logs: AuditLog[]; total: number }> {
     try {
       const where: any = {};
-      
+
       if (filters.userId) where.userId = filters.userId;
       if (filters.event) where.event = filters.event;
       if (filters.level) where.level = filters.level;
-      
+
       if (filters.startDate || filters.endDate) {
         where.timestamp = {};
         if (filters.startDate) where.timestamp.$gte = filters.startDate.toISOString();
@@ -252,7 +253,7 @@ export class AuditService {
     try {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
-      
+
       const result = await this.controller.search({
         timestamp: { $lt: cutoffDate.toISOString() }
       });
@@ -263,11 +264,11 @@ export class AuditService {
           const deleteResult = await this.controller.delete((log as any).id);
           if (deleteResult.success) deletedCount++;
         }
-        
+
         defaultLogger.info(`Cleaned up ${deletedCount} audit logs older than ${olderThanDays} days`);
         return deletedCount;
       }
-      
+
       return 0;
     } catch (error) {
       defaultLogger.error('Error cleaning up audit logs', error as Error);

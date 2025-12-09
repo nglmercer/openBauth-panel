@@ -8,16 +8,21 @@ process.env['DATABASE_URL'] = ":memory:";
 process.env['BCRYPT_ROUNDS'] = "4"; // Reduced for faster tests
 process.env['RATE_LIMIT_WINDOW'] = "1";
 process.env['RATE_LIMIT_MAX_REQUESTS'] = "1000";
+// Disable email service for tests (speeds up user creation)
+process.env['SMTP_HOST'] = "";
+process.env['SMTP_USER'] = "";
+process.env['SMTP_PASS'] = "";
 
 // Test utilities
 const testUtils = {
   // Generate test user data
   generateTestUser(overrides: any = {}) {
     const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 100000);
     return {
-      email: `test${timestamp}@example.com`,
+      email: `test${timestamp}_${random}@example.com`,
       password: "TestPassword123!",
-      username: `testuser${timestamp}`,
+      username: `testuser${timestamp}_${random}`,
       first_name: "Test",
       last_name: "User",
       ...overrides
@@ -118,11 +123,11 @@ export {
 };
 
 // Re-export commonly used types and utilities
-export type { 
-  User, 
-  Role, 
-  Permission, 
-  AuthResult, 
+export type {
+  User,
+  Role,
+  Permission,
+  AuthResult,
   JWTPayload
 } from "open-bauth";
 
