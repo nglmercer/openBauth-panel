@@ -4,6 +4,7 @@ import { getServiceFactory } from "../services/service-factory";
 import { defaultLogger } from "../utils/logger";
 // import { isSystemTable } from "../utils/system-tables";
 import { BaseController } from "open-bauth";
+import { db } from "@/db";
 
 export const genericData = new Hono();
 const factory = getServiceFactory();
@@ -121,6 +122,97 @@ genericData.get("/:tableName/schema", async (c) => {
   }
 });
 
+// GET /api/v1/data/:tableName/count - Get record count (MUST BE BEFORE /:tableName/:id)
+genericData.get("/:tableName/count", async (c) => {
+  try {
+    const tableName = (c as any).tableName;
+    const controller = getController(tableName);
+    const query = c.req.query();
+
+    // Build filter from query parameters
+    const filters: Record<string, any> = {};
+    Object.entries(query).forEach(([key, value]) => {
+      if (value) {
+        try {
+          filters[key] = JSON.parse(value as string);
+        } catch {
+          filters[key] = value;
+        }
+      }
+    });
+
+    const countResult = await controller.count(Object.keys(filters).length > 0 ? filters : undefined);
+    const count = typeof countResult === 'object' && countResult !== null && 'data' in countResult
+      ? countResult.data
+      : countResult;
+
+    return c.json({
+      success: true,
+      count: count
+    });
+
+  } catch (error) {
+    defaultLogger.error("Count records error", error as Error);
+    return c.json({
+      success: false,
+      error: "Failed to count records"
+    }, 500);
+  }
+});
+
+// GET /api/v1/data/:tableName/search - Advanced search (MUST BE BEFORE /:tableName/:id)
+genericData.get("/:tableName/search", async (c) => {
+  try {
+    const tableName = (c as any).tableName;
+    const controller = getController(tableName);
+    const query = c.req.query();
+
+    // Parse search parameters
+    const searchParams: any = {};
+    const options: any = {};
+
+    Object.entries(query).forEach(([key, value]) => {
+      if (key === 'q' || key === 'query') {
+        searchParams.search = value;
+      } else if (key === 'limit') {
+        options.limit = Math.min(parseInt(value as string) || 20, 100);
+      } else if (key === 'offset') {
+        options.offset = parseInt(value as string) || 0;
+      } else if (key === 'sort') {
+        options.orderBy = value;
+      } else if (key === 'order') {
+        options.order = value;
+      } else if (value) {
+        // Add to search filters
+        try {
+          searchParams[key] = JSON.parse(value as string);
+        } catch {
+          searchParams[key] = value;
+        }
+      }
+    });
+
+    const result = await controller.search(searchParams, options);
+
+    // Ensure result has proper structure
+    const responseData = Array.isArray(result) ? result : (result?.data || []);
+    const total = typeof result === 'object' && 'total' in result ? result.total : responseData.length;
+
+    return c.json({
+      success: true,
+      data: responseData,
+      total: total
+    });
+
+  } catch (error) {
+    defaultLogger.error("Search records error", error as Error);
+    return c.json({
+      success: false,
+      error: "Failed to search records"
+    }, 500);
+  }
+});
+
 // GET /api/v1/data/:tableName - List records with pagination and filtering
 genericData.get("/:tableName", async (c) => {
   try {
@@ -149,26 +241,62 @@ genericData.get("/:tableName", async (c) => {
     const limit = Math.min(validated.limit || 20, 100); // Max 100 items per page
     const offset = (page - 1) * limit;
 
-    // Build options
-    const options: any = {
-      limit,
-      offset,
-      where: Object.keys(filters).length > 0 ? filters : undefined
-    };
+    // Build options with direct SQL query if field selection is requested
+    let result: any;
 
-    // Sorting
-    if (validated.sort) {
-      options.orderBy = validated.sort;
-      options.order = validated.order || 'asc';
-    }
-
-    // Field selection
     if (validated.fields) {
-      options.select = validated.fields.split(',').map(f => f.trim());
-    }
+      // Use raw SQL for field selection
+      const selectedFields = validated.fields.split(',').map(f => f.trim()).join(', ');
+      let sql = `SELECT ${selectedFields} FROM ${tableName}`;
+      const params: any[] = [];
 
-    // Execute query
-    const result = await controller.findAll(options);
+      // Add WHERE clause if filters exist
+      if (Object.keys(filters).length > 0) {
+        const whereClauses = Object.entries(filters).map(([key, value]) => {
+          params.push(value);
+          return `${key} = ?`;
+        });
+        sql += ` WHERE ${whereClauses.join(' AND ')}`;
+      }
+
+      // Add ORDER BY if sort is specified
+      if (validated.sort) {
+        sql += ` ORDER BY ${validated.sort} ${(validated.order || 'asc').toUpperCase()}`;
+      }
+
+      // Add pagination
+      sql += ` LIMIT ? OFFSET ?`;
+      params.push(limit, offset);
+
+      // Get total count for pagination
+      let countSql = `SELECT COUNT(*) as count FROM ${tableName}`;
+      if (Object.keys(filters).length > 0) {
+        const whereClauses = Object.entries(filters).map(([key]) => `${key} = ?`);
+        countSql += ` WHERE ${whereClauses.join(' AND ')}`;
+      }
+      const countResult = db.query(countSql).all(...Object.values(filters)) as any[];
+      const total = countResult[0]?.count || 0;
+
+      // Execute main query
+      const data = db.query(sql).all(...params);
+      result = { data, total };
+    } else {
+      // Use controller's findAll method for standard queries
+      const options: any = {
+        limit,
+        offset,
+        where: Object.keys(filters).length > 0 ? filters : undefined
+      };
+
+      // Sorting - pass orderBy and order separately
+      if (validated.sort) {
+        options.orderBy = validated.sort;
+        options.order = validated.order || 'asc';
+      }
+
+      // Execute query
+      result = await controller.findAll(options);
+    }
 
     // Add pagination metadata
     const response = {
@@ -431,88 +559,5 @@ genericData.post("/:tableName/bulk", async (c) => {
   }
 });
 
-// GET /api/v1/data/:tableName/count - Get record count
-genericData.get("/:tableName/count", async (c) => {
-  try {
-    const tableName = (c as any).tableName;
-    const controller = getController(tableName);
-    const query = c.req.query();
-
-    // Build filter from query parameters
-    const filters: Record<string, any> = {};
-    Object.entries(query).forEach(([key, value]) => {
-      if (value) {
-        try {
-          filters[key] = JSON.parse(value as string);
-        } catch {
-          filters[key] = value;
-        }
-      }
-    });
-
-    const result = await controller.count(Object.keys(filters).length > 0 ? filters : undefined);
-
-    return c.json({
-      success: true,
-      count: result
-    });
-
-  } catch (error) {
-    defaultLogger.error("Count records error", error as Error);
-    return c.json({
-      success: false,
-      error: "Failed to count records"
-    }, 500);
-  }
-});
-
-// GET /api/v1/data/:tableName/search - Advanced search
-genericData.get("/:tableName/search", async (c) => {
-  try {
-    const tableName = (c as any).tableName;
-    const controller = getController(tableName);
-    const query = c.req.query();
-
-    // Parse search parameters
-    const searchParams: any = {};
-    const options: any = {};
-
-    Object.entries(query).forEach(([key, value]) => {
-      if (key === 'q' || key === 'query') {
-        searchParams.search = value;
-      } else if (key === 'limit') {
-        options.limit = Math.min(parseInt(value as string) || 20, 100);
-      } else if (key === 'offset') {
-        options.offset = parseInt(value as string) || 0;
-      } else if (key === 'sort') {
-        options.orderBy = value;
-      } else if (key === 'order') {
-        options.order = value;
-      } else if (value) {
-        // Add to search filters
-        try {
-          searchParams[key] = JSON.parse(value as string);
-        } catch {
-          searchParams[key] = value;
-        }
-      }
-    });
-
-    const result = await controller.search(searchParams, options);
-
-    return c.json({
-      success: true,
-      data: result.data,
-      total: result.total
-    });
-
-  } catch (error) {
-    defaultLogger.error("Search records error", error as Error);
-    return c.json({
-      success: false,
-      error: "Failed to search records"
-    }, 500);
-  }
-});
 
 export { genericData as genericRoutes };

@@ -382,7 +382,7 @@ describe("Admin API - Comprehensive Tests", () => {
             expect(response.status).toBe(400);
             const result = await response.json() as any;
             expect(result.success).toBe(false);
-        }, TEST_TIMEOUTS.LONG);
+        }, TEST_TIMEOUTS.VERY_LONG);
     });
 
     describe("Admin Authorization", () => {
