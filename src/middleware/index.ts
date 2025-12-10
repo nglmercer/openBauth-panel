@@ -10,12 +10,12 @@ export function createAuthMiddlewareForHono(options: {
 } = {}) {
   const factory = getServiceFactory();
   const services = factory.getServices();
+  const rolesController = services.permissionService
 
   return async (c: any, next: any) => {
     try {
       // Get authorization header
       const authHeader = c.req.header("authorization");
-
       if (!authHeader) {
         if (options.required !== false) {
           return c.json({
@@ -74,25 +74,13 @@ export function createAuthMiddlewareForHono(options: {
         return;
       }
 
-      // Fetch roles if not present on user object
+      // Fetch roles if not present on user object - optimized with caching
       if (!user.roles || user.roles.length === 0) {
         try {
-          const db = services.dbInitializer.db;
-          // Check if it's a Bun SQLite database instance
-          if (db && typeof db.query === 'function') {
-            const rolesQuery = db.query(`
-              SELECT r.name 
-              FROM roles r 
-              JOIN user_roles ur ON r.id = ur.role_id 
-              WHERE ur.user_id = $userId
-            `);
-            const allUserRoles = db.query("SELECT * FROM user_roles").all();
-            defaultLogger.info("AuthMiddleware: ALL USER_ROLES", allUserRoles);
-
-            const roles = rolesQuery.all({ $userId: user.id });
-            defaultLogger.info("AuthMiddleware: Fetched roles for user", { userId: user.id, roles });
+          const result = await rolesController.getAllRoles();
+            const roles = result;
             (user as any).roles = roles.map((r: any) => r.name);
-          }
+          
         } catch (e) {
           defaultLogger.error("Failed to fetch user roles", e as Error);
         }

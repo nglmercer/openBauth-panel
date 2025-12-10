@@ -6,6 +6,7 @@ import {
   AuthService,
   PermissionService,
   getOAuthSchemas,
+  BaseController
 } from "open-bauth";
 import { faker } from "@faker-js/faker";
 
@@ -234,31 +235,28 @@ async function setupTestData() {
       "Home & Kitchen",
       "Sports",
     ];
-
+    const categoryController = new BaseController("categories", {
+      database: db
+    });
     for (const categoryName of categoryNames) {
-      const category = await db
-        .query(
-          `
-         INSERT INTO categories (name, description)
-         VALUES (?, ?)
-         RETURNING id
-       `.trim(),
-        )
-        .run([
-          categoryName,
-          `All kinds of ${categoryName.toLowerCase()}`,
-        ] as any);
-
-      categories.push({
-        id: (category as any).lastInsertRowid,
-        name: categoryName,
-      });
+        const result = await categoryController.create({
+          name: categoryName,
+          description: `All kinds of ${categoryName.toLowerCase()}`
+        });
+        
+        if (result.success && result.data) {
+          categories.push({
+            name: result.data["name"],
+            id: result.data["id"]
+          });
+        } 
     }
-
     // Create products
     console.log("Creating products...");
     const productToCreate = 50;
-
+    const productsController = new BaseController("products", {
+      database: db
+    });
     for (let i = 0; i < productToCreate; i++) {
       const randomCategory = faker.helpers.arrayElement(categories);
       const productName = faker.commerce.productName();
@@ -266,39 +264,29 @@ async function setupTestData() {
       const productPrice = parseFloat(faker.commerce.price());
       const inStock = faker.datatype.boolean();
 
-      await db
-        .query(
-          `
-         INSERT INTO products (name, description, price, in_stock, category_id)
-         VALUES (?, ?, ?, ?, ?)
-       `.trim(),
-        )
-        .run([
-          productName,
-          productDescription,
-          productPrice,
-          inStock,
-          randomCategory.id,
-        ] as any);
+      const result = await productsController.create({
+        name: productName,
+        description: productDescription,
+        price: productPrice,
+        in_stock: inStock,
+        category_id: randomCategory.id  // ← Ahora tiene el ID correcto
+      });
+      
+      if (result.success) {
+        console.log(`Created product ${i + 1}/50: ${productName}`);
+      } else {
+        console.error(`Failed to create product:`, result.error);
+      }
     }
+    const usersController = new BaseController("users", { database: db });
+    const userCount = await usersController.count();
+    const productCount = await productsController.count();
+    const categoriesCount = await categoryController.count(); 
+    console.log(`Users: ${userCount.data}`);
 
-    console.log("Test data setup completed successfully!");
-    console.log("\n=== Test Accounts ===");
-    console.log(`Admin: admin@example.com / adminPassword123`);
-    console.log(`User: user@example.com / userPassword123`);
-    console.log("\n=== Database Summary ===");
-    const userCount = db.query("SELECT COUNT(*) as count FROM users").get() as {
-      count: number;
-    };
-    console.log(`Users: ${userCount.count}`);
-    const categoryCount = db
-      .query("SELECT COUNT(*) as count FROM categories")
-      .get() as { count: number };
-    console.log(`Categories: ${categoryCount.count}`);
-    const productsTotal = db
-      .query("SELECT COUNT(*) as count FROM products")
-      .get() as { count: number };
-    console.log(`Products: ${productsTotal.count}`);
+    console.log(`Categories: ${categoriesCount.data||categoriesCount.total}`);
+    console.log(`Products: ${productCount.data||productCount.total}`); 
+    
 
     // Close database connection
     db.close();

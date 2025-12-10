@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { getServiceFactory } from "../services/service-factory";
 import { createAuthMiddlewareForHono } from "../middleware";
 import { defaultLogger } from "../utils/logger";
-import { ChallengeType } from "open-bauth";
+import { ChallengeType,BaseController } from "open-bauth";
 import {
   updateProfileSchema,
   updatePasswordSchema,
@@ -13,6 +13,8 @@ import {
   createValidationMiddleware,
   getValidatedData
 } from "../schemas";
+import { db } from "@/db";
+import type { TokenType } from "@/database/schema/verification-token";
 export const user = new Hono();
 const factory = getServiceFactory();
 const services = factory.getServices();
@@ -84,7 +86,7 @@ user.patch("/me", createValidationMiddleware(updateProfileSchema), async (c) => 
     }
 
     const userController = services.dbInitializer.createController("users");
-    const result = await userController.update(userId, validated as any);
+    const result = await userController.update(userId, validated);
 
     if (!result.success) {
       return c.json({
@@ -173,17 +175,22 @@ user.post("/mfa/setup", createValidationMiddleware(mfaSetupSchema), async (c) =>
     // Send verification code
     if (services.notificationService) {
       const verificationCode = await services.securityService.generateSecureToken(6);
-
+      
       // Store verification code for SMS/Email
       if (validated.mfaType === "sms" || validated.mfaType === "email") {
-        const tokenController = services.dbInitializer.createController("verification_tokens");
 
-        // Invalidate previous tokens of this type for this user
-        // Using raw query for delete since controller might generic
-        const db = (services.dbInitializer as any).database;
+        const tokenController = services.dbInitializer.createController<TokenType>("verification_tokens");
+    
+
         const type = validated.mfaType === "sms" ? "sms_verification" : "email_verification";
-        db.run("DELETE FROM verification_tokens WHERE user_id = ? AND type = ?", [userId, type]);
-
+        const tokenElement = await tokenController.search({
+          type,
+          user_id: userId
+        })
+        if (tokenElement && tokenElement.data )tokenElement.data.forEach((data) => {
+          tokenController.delete(data["id"]!)
+        });
+        
         await tokenController.create({
           id: crypto.randomUUID(),
           user_id: userId,
@@ -239,7 +246,9 @@ user.post("/mfa/verify", createValidationMiddleware(mfaVerifySchema), async (c) 
     const userId = auth.user.id;
 
     const validated = getValidatedData<import('../schemas/validation-schemas').MFAVerifyInput>(c);
-
+    const verifyController = new BaseController<TokenType>('verification_tokens',{
+      database: db
+    })
     // Manual implementation since verifyMFA is missing from EnhancedUserService in the installed version
     const mfaConfigs = await services.enhancedUserService.getEnabledMFAConfigurations(userId);
     const config = mfaConfigs.find(c => c.mfa_type === validated.mfaType);
@@ -280,35 +289,33 @@ user.post("/mfa/verify", createValidationMiddleware(mfaVerifySchema), async (c) 
     } else if (validated.mfaType === "sms" || validated.mfaType === "email") {
       // Retrieve stored token
       const type = validated.mfaType === "sms" ? "sms_verification" : "email_verification";
-      const db = (services.dbInitializer as any).database;
-
-      // Get valid token
-      const row = db.query(
-        "SELECT * FROM verification_tokens WHERE user_id = ? AND type = ? AND expires_at > ? ORDER BY created_at DESC LIMIT 1"
-      ).get(userId, type, new Date().toISOString());
-
-      if (!row) {
+      const element = await verifyController.findFirst({
+        user_id: userId,
+        type: type,
+        expires_at: new Date()
+      })
+      if (!element || !element.success) {
         return c.json({ success: false, error: "Invalid or expired verification code" }, 400);
       }
 
       const challengeType = validated.mfaType === "sms" ? ChallengeType.SMS_VERIFICATION : ChallengeType.EMAIL_VERIFICATION;
 
       const challenge = services.securityService.createChallenge(challengeType, {
-        expectedCode: row.token
+        expectedCode: element.data?.token 
       });
 
       verification = await services.securityService.verifyChallenge(
         {
           ...challenge,
-          id: row.id,
-          created_at: row.created_at
+          id: element.data?.id!,
+          created_at: element.data?.created_at?.toISOString()!
         },
         { code: validated.code }
       );
 
       // cleanup used token if valid
       if (verification.valid) {
-        db.run("DELETE FROM verification_tokens WHERE id = ?", [row.id]);
+        await verifyController.delete(element.data?.id!)
       }
     }
 
