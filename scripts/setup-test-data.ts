@@ -2,7 +2,7 @@
 import { Database } from "bun:sqlite";
 import { DatabaseInitializer } from "open-bauth";
 import {
-  JWTService,
+  JWTServiceBun,
   AuthService,
   PermissionService,
   getOAuthSchemas,
@@ -12,7 +12,7 @@ import { faker } from "@faker-js/faker";
 // Initialize database
 const db = new Database("./database/test-data.db");
 const dbInitializer = new DatabaseInitializer({ database: db });
-const jwtService = new JWTService(process.env["JWT_SECRET"] || "dev-secret", "7d");
+const jwtService = new JWTServiceBun(process.env["JWT_SECRET"] || "dev-secret", "7d");
 const authService = new AuthService(dbInitializer, jwtService);
 new PermissionService(dbInitializer); // Create instance but don't assign to unused variable
 

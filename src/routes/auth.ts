@@ -1,59 +1,28 @@
 import { Hono } from "hono";
-import { z } from "zod";
 import { getServiceFactory } from "../services/service-factory";
 import { createAuthMiddlewareForHono } from "../middleware";
 import { defaultLogger } from "../utils/logger";
+import {
+  loginSchema,
+  registerSchema,
+  refreshTokenSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+  anonymousUserSchema,
+  createValidationMiddleware,
+  getValidatedData
+} from "../schemas";
 
 export const auth = new Hono();
 const factory = getServiceFactory();
 const services = factory.getServices();
 
-// Validation schemas
-const loginSchema = z.object({
-  email: z.string().email("Invalid email format"),
-  password: z.string().min(8, "Password must be at least 8 characters")
-});
-
-const registerSchema = z.object({
-  email: z.string().email("Invalid email format"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  first_name: z.string().min(2, "First name must be at least 2 characters"),
-  last_name: z.string().min(2, "Last name must be at least 2 characters")
-});
-
-const refreshTokenSchema = z.object({
-  refreshToken: z.string()
-});
-
-const forgotPasswordSchema = z.object({
-  email: z.string().email("Invalid email format")
-});
-
-const resetPasswordSchema = z.object({
-  token: z.string(),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  confirmPassword: z.string()
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-});
-
-const verifyEmailSchema = z.object({
-  token: z.string()
-});
-
-// Anonymous user schema
-const anonymousSchema = z.object({
-  sessionData: z.object({}).optional(),
-  preferences: z.object({}).optional()
-});
 
 // POST /api/v1/auth/signup - Register new user
-auth.post("/signup", async (c) => {
+auth.post("/signup", createValidationMiddleware(registerSchema), async (c) => {
   try {
-    const body = await c.req.json();
-    const validated = registerSchema.parse(body);
+    const validated = getValidatedData<import('../schemas/validation-schemas').RegisterInput>(c);
 
     // Log signup attempt
     await services.auditService.logAuthEvent('user.signup.attempt', 'anonymous', c.req.header('x-forwarded-for') || 'unknown');
@@ -95,14 +64,6 @@ auth.post("/signup", async (c) => {
     }, 201);
 
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({
-        success: false,
-        error: "Validation error",
-        details: error.errors
-      }, 400);
-    }
-
     defaultLogger.error("Signup error", error as Error);
     return c.json({
       success: false,
@@ -112,10 +73,9 @@ auth.post("/signup", async (c) => {
 });
 
 // POST /api/v1/auth/login - User login
-auth.post("/login", async (c) => {
+auth.post("/login", createValidationMiddleware(loginSchema), async (c) => {
   try {
-    const body = await c.req.json();
-    const validated = loginSchema.parse(body);
+    const validated = getValidatedData<import('../schemas/validation-schemas').LoginInput>(c);
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
 
@@ -153,14 +113,6 @@ auth.post("/login", async (c) => {
     });
 
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({
-        success: false,
-        error: "Validation error",
-        details: error.errors
-      }, 400);
-    }
-
     defaultLogger.error("Login error", error as Error);
     return c.json({
       success: false,
@@ -170,10 +122,9 @@ auth.post("/login", async (c) => {
 });
 
 // POST /api/v1/auth/anonymous - Create anonymous session
-auth.post("/anonymous", async (c) => {
+auth.post("/anonymous", createValidationMiddleware(anonymousUserSchema), async (c) => {
   try {
-    const body = await c.req.json();
-    const validated = anonymousSchema.parse(body);
+    const validated = getValidatedData<import('../schemas/validation-schemas').schemas.auth.anonymous>(c);
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
 
@@ -197,14 +148,6 @@ auth.post("/anonymous", async (c) => {
     });
 
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({
-        success: false,
-        error: "Validation error",
-        details: error.errors
-      }, 400);
-    }
-
     defaultLogger.error("Anonymous session error", error as Error);
     return c.json({
       success: false,
@@ -214,10 +157,9 @@ auth.post("/anonymous", async (c) => {
 });
 
 // POST /api/v1/auth/refresh - Refresh access token
-auth.post("/refresh", async (c) => {
+auth.post("/refresh", createValidationMiddleware(refreshTokenSchema), async (c) => {
   try {
-    const body = await c.req.json();
-    const validated = refreshTokenSchema.parse(body);
+    const validated = getValidatedData<import('../schemas/validation-schemas').schemas.auth.refresh>(c);
 
     const result = await services.jwtService.verifyRefreshToken(validated.refreshToken);
 
@@ -251,14 +193,6 @@ auth.post("/refresh", async (c) => {
     });
 
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({
-        success: false,
-        error: "Validation error",
-        details: error.errors
-      }, 400);
-    }
-
     const errorMessage = (error as Error).message;
     if (errorMessage.includes("Invalid refresh token")) {
       return c.json({
@@ -304,10 +238,9 @@ auth.post("/logout", createAuthMiddlewareForHono(), async (c) => {
 });
 
 // POST /api/v1/auth/forgot-password - Request password reset
-auth.post("/forgot-password", async (c) => {
+auth.post("/forgot-password", createValidationMiddleware(forgotPasswordSchema), async (c) => {
   try {
-    const body = await c.req.json();
-    const validated = forgotPasswordSchema.parse(body);
+    const validated = getValidatedData<import('../schemas/validation-schemas').schemas.auth.forgotPassword>(c);
 
     const user = await services.authService.findUserByEmail(validated.email);
 
@@ -335,14 +268,6 @@ auth.post("/forgot-password", async (c) => {
     });
 
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({
-        success: false,
-        error: "Validation error",
-        details: error.errors
-      }, 400);
-    }
-
     defaultLogger.error("Forgot password error", error as Error);
     return c.json({
       success: false,
@@ -352,10 +277,9 @@ auth.post("/forgot-password", async (c) => {
 });
 
 // POST /api/v1/auth/reset-password - Reset password with token
-auth.post("/reset-password", async (c) => {
+auth.post("/reset-password", createValidationMiddleware(resetPasswordSchema), async (c) => {
   try {
-    const body = await c.req.json();
-    const validated = resetPasswordSchema.parse(body);
+    const validated = getValidatedData<import('../schemas/validation-schemas').schemas.auth.resetPassword>(c);
 
     // Verify token
     const verification = await services.verificationService.verifyToken(validated.token, 'RESET_PASSWORD');
@@ -398,14 +322,6 @@ auth.post("/reset-password", async (c) => {
     });
 
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({
-        success: false,
-        error: "Validation error",
-        details: error.errors
-      }, 400);
-    }
-
     defaultLogger.error("Reset password error", error as Error);
     return c.json({
       success: false,
@@ -415,10 +331,9 @@ auth.post("/reset-password", async (c) => {
 });
 
 // POST /api/v1/auth/verify-email - Verify email with token
-auth.post("/verify-email", async (c) => {
+auth.post("/verify-email", createValidationMiddleware(verifyEmailSchema), async (c) => {
   try {
-    const body = await c.req.json();
-    const validated = verifyEmailSchema.parse(body);
+    const validated = getValidatedData<import('../schemas/validation-schemas').schemas.auth.verifyEmail>(c);
 
     // Verify token
     const verification = await services.verificationService.verifyToken(validated.token, 'VERIFY_EMAIL');
@@ -450,14 +365,6 @@ auth.post("/verify-email", async (c) => {
     });
 
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return c.json({
-        success: false,
-        error: "Validation error",
-        details: error.errors
-      }, 400);
-    }
-
     defaultLogger.error("Email verification error", error as Error);
     return c.json({
       success: false,

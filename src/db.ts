@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { DatabaseInitializer } from "open-bauth";
 import {
-  JWTService,
+  JWTServiceBun,
   AuthService,
   PermissionService,
   getOAuthSchemas,
@@ -9,7 +9,7 @@ import {
 
 const db = new Database(process.env['DATABASE_URL'] || ":memory:");
 const dbInitializer = new DatabaseInitializer({ database: db });
-const jwtService = new JWTService(process.env["JWT_SECRET"] || "dev-secret", "7d");
+const jwtService = new JWTServiceBun(process.env["JWT_SECRET"] || "dev-secret", "7d");
 const authService = new AuthService(dbInitializer, jwtService);
 const permissionService = new PermissionService(dbInitializer);
 const oauthSchemas = getOAuthSchemas();

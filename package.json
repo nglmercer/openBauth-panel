@@ -19,7 +19,7 @@
     "dotenv": "^16.3.1",
     "hono": "^3.12.0",
     "nodemailer": "^6.9.7",
-    "open-bauth": "^1.4.4",
+    "open-bauth": "^1.4.9",
     "zod": "^3.22.4"
   },
   "devDependencies": {

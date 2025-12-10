@@ -1,5 +1,5 @@
 import { DatabaseInitializer } from "open-bauth";
-import { JWTService } from "open-bauth";
+import { JWTServiceBun } from "open-bauth";
 
 // Set test environment
 process.env['NODE_ENV'] = "test";
@@ -53,7 +53,7 @@ const testUtils = {
 
   // Generate test JWT
   async generateTestJWT(payload: any, options: any = {}) {
-    const jwtService = new JWTService(
+    const jwtService = new JWTServiceBun(
       process.env['JWT_SECRET']!,
       options.expiresIn || "1h"
     );
