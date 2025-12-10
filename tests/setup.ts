@@ -100,10 +100,10 @@ const testUtils = {
 
 // Test timeouts
 const TEST_TIMEOUTS = {
-  SHORT: 1000,      // 1 second
-  MEDIUM: 5000,     // 5 seconds
-  LONG: 10000,      // 10 seconds
-  VERY_LONG: 30000, // 30 seconds
+  SHORT: 100,
+  MEDIUM: 3000,     // 3 seconds
+  LONG: 5000,      // 5 seconds
+  VERY_LONG: 10000, // 10 seconds
 };
 
 // Handle unhandled rejections
