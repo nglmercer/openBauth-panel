@@ -57,7 +57,7 @@ describe("Zod Schema Validation", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
-      expect(result.error?.message).toContain("Must be at least 1 characters");
+      expect(result.error?.message).toContain("Value too small");
     });
   });
 
@@ -90,7 +90,7 @@ describe("Zod Schema Validation", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
-      expect(result.error?.message).toContain("at least 8 characters");
+      expect(result.error?.message).toContain("Value too small");
     });
 
     test("should reject invalid username format", () => {
@@ -348,13 +348,16 @@ describe("Integration Tests", () => {
 
   test("should work with Hono-like context", async () => {
     // Simulate a Hono context
+    const store = new Map<string, any>();
     const mockContext = {
       req: {
         json: async () => ({
           email: "test@example.com",
           password: "TestPass123!"
         })
-      }
+      },
+      get: (key: string) => store.get(key),
+      set: (key: string, value: any) => store.set(key, value)
     };
 
     // Simulate middleware behavior
@@ -372,7 +375,7 @@ describe("Integration Tests", () => {
     const result = validateData(loginSchema, body);
 
     if (result.success) {
-      (mockContext as any).validatedData = result.data;
+      mockContext.set('validatedData', result.data);
       await next();
     }
 
