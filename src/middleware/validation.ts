@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 import type { Context } from "hono";
-import { CustomError, DatabaseErrorType } from "../types/errors";
+import { DatabaseErrorType } from "../types/errors";
 import { defaultLogger } from "../utils/logger";
 
 /**
@@ -91,17 +91,17 @@ function createValidationError(
 function formatZodError(issue: z.ZodIssue): string {
   const path = issue.path.join(".");
 
-  switch (issue.code) {
+  switch ((issue as any).code) {
     case "invalid_type":
-      return `${path}: Expected ${issue.expected}, received ${issue.received}`;
+      return `${path}: Expected ${(issue as any).expected}, received ${(issue as any).received}`;
     case "invalid_string":
-      if (issue.validation === "email") {
+      if ((issue as any).validation === "email") {
         return `${path}: Invalid email format`;
       }
-      if (issue.validation === "url") {
+      if ((issue as any).validation === "url") {
         return `${path}: Invalid URL format`;
       }
-      if (issue.validation === "regex") {
+      if ((issue as any).validation === "regex") {
         return `${path}: Invalid format`;
       }
       return `${path}: ${issue.message}`;
@@ -114,9 +114,9 @@ function formatZodError(issue: z.ZodIssue): string {
       }
       return `${path}: Invalid format`;
     case "too_small":
-      return `${path}: Must be at least ${issue.minimum} ${issue.type === "string" || !issue.type ? "characters" : "items"}`;
+      return `${path}: Must be at least ${(issue as any).minimum} ${(issue as any).type === "string" || !(issue as any).type ? "characters" : "items"}`;
     case "too_big":
-      return `${path}: Must be at most ${issue.maximum} ${issue.type === "string" || !issue.type ? "characters" : "items"}`;
+      return `${path}: Must be at most ${(issue as any).maximum} ${(issue as any).type === "string" || !(issue as any).type ? "characters" : "items"}`;
     case "custom":
       return `${path}: ${issue.message}`;
     default:
@@ -221,6 +221,7 @@ export function createValidationMiddleware<T>(
       (c as any).validatedData = result.data;
 
       await next();
+      return;
     } catch (error) {
       defaultLogger.error("Validation middleware error", error as Error);
       return c.json({
@@ -259,6 +260,7 @@ export function createQueryValidationMiddleware<T>(
       (c as any).validatedQuery = result.data;
 
       await next();
+      return;
     } catch (error) {
       defaultLogger.error("Query validation middleware error", error as Error);
       return c.json({
@@ -297,6 +299,7 @@ export function createParamValidationMiddleware<T>(
       (c as any).validatedParams = result.data;
 
       await next();
+      return;
     } catch (error) {
       defaultLogger.error("Parameter validation middleware error", error as Error);
       return c.json({
@@ -369,6 +372,7 @@ export function createCombinedValidationMiddleware(options: {
       (c as any).validatedData = validationResults;
 
       await next();
+      return;
     } catch (error) {
       defaultLogger.error("Combined validation middleware error", error as Error);
       return c.json({

@@ -11,7 +11,14 @@ import {
   verifyEmailSchema,
   anonymousUserSchema,
   createValidationMiddleware,
-  getValidatedData
+  getValidatedData,
+  type RegisterInput,
+  type LoginInput,
+  type AnonymousUserInput,
+  type RefreshTokenInput,
+  type ForgotPasswordInput,
+  type ResetPasswordInput,
+  type VerifyEmailInput
 } from "../schemas";
 
 export const auth = new Hono();
@@ -22,7 +29,7 @@ const services = factory.getServices();
 // POST /api/v1/auth/signup - Register new user
 auth.post("/signup", createValidationMiddleware(registerSchema), async (c) => {
   try {
-    const validated = getValidatedData<import('../schemas/validation-schemas').RegisterInput>(c);
+    const validated = getValidatedData<RegisterInput>(c);
 
     // Log signup attempt
     await services.auditService.logAuthEvent('user.signup.attempt', 'anonymous', c.req.header('x-forwarded-for') || 'unknown');
@@ -75,7 +82,7 @@ auth.post("/signup", createValidationMiddleware(registerSchema), async (c) => {
 // POST /api/v1/auth/login - User login
 auth.post("/login", createValidationMiddleware(loginSchema), async (c) => {
   try {
-    const validated = getValidatedData<import('../schemas/validation-schemas').LoginInput>(c);
+    const validated = getValidatedData<LoginInput>(c);
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
 
@@ -124,7 +131,7 @@ auth.post("/login", createValidationMiddleware(loginSchema), async (c) => {
 // POST /api/v1/auth/anonymous - Create anonymous session
 auth.post("/anonymous", createValidationMiddleware(anonymousUserSchema), async (c) => {
   try {
-    const validated = getValidatedData<import('../schemas/validation-schemas').schemas.auth.anonymous>(c);
+    const validated = getValidatedData<AnonymousUserInput>(c);
 
     const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
 
@@ -159,7 +166,7 @@ auth.post("/anonymous", createValidationMiddleware(anonymousUserSchema), async (
 // POST /api/v1/auth/refresh - Refresh access token
 auth.post("/refresh", createValidationMiddleware(refreshTokenSchema), async (c) => {
   try {
-    const validated = getValidatedData<import('../schemas/validation-schemas').schemas.auth.refresh>(c);
+    const validated = getValidatedData<RefreshTokenInput>(c);
 
     const result = await services.jwtService.verifyRefreshToken(validated.refreshToken);
 
@@ -239,7 +246,7 @@ auth.post("/logout", createAuthMiddlewareForHono(), async (c) => {
 // POST /api/v1/auth/forgot-password - Request password reset
 auth.post("/forgot-password", createValidationMiddleware(forgotPasswordSchema), async (c) => {
   try {
-    const validated = getValidatedData<import('../schemas/validation-schemas').schemas.auth.forgotPassword>(c);
+    const validated = getValidatedData<ForgotPasswordInput>(c);
 
     const user = await services.authService.findUserByEmail(validated.email);
 
@@ -278,7 +285,7 @@ auth.post("/forgot-password", createValidationMiddleware(forgotPasswordSchema), 
 // POST /api/v1/auth/reset-password - Reset password with token
 auth.post("/reset-password", createValidationMiddleware(resetPasswordSchema), async (c) => {
   try {
-    const validated = getValidatedData<import('../schemas/validation-schemas').schemas.auth.resetPassword>(c);
+    const validated = getValidatedData<ResetPasswordInput>(c);
 
     // Verify token
     const verification = await services.verificationService.verifyToken(validated.token, 'RESET_PASSWORD');
@@ -332,7 +339,7 @@ auth.post("/reset-password", createValidationMiddleware(resetPasswordSchema), as
 // POST /api/v1/auth/verify-email - Verify email with token
 auth.post("/verify-email", createValidationMiddleware(verifyEmailSchema), async (c) => {
   try {
-    const validated = getValidatedData<import('../schemas/validation-schemas').schemas.auth.verifyEmail>(c);
+    const validated = getValidatedData<VerifyEmailInput>(c);
 
     // Verify token
     const verification = await services.verificationService.verifyToken(validated.token, 'VERIFY_EMAIL');

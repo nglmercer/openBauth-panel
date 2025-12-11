@@ -326,7 +326,7 @@ genericData.get("/:tableName", async (c) => {
       return c.json({
         success: false,
         error: "Invalid query parameters",
-        details: error.errors
+        details: (error as any).errors
       }, 400);
     }
 
@@ -404,7 +404,7 @@ genericData.post("/:tableName", async (c) => {
       return c.json({
         success: false,
         error: "Invalid request data",
-        details: error.errors
+        details: (error as any).errors
       }, 400);
     }
 
@@ -453,7 +453,7 @@ genericData.put("/:tableName/:id", async (c) => {
       return c.json({
         success: false,
         error: "Invalid request data",
-        details: error.errors
+        details: (error as any).errors
       }, 400);
     }
 
@@ -554,7 +554,7 @@ genericData.post("/:tableName/bulk", async (c) => {
       return c.json({
         success: false,
         error: "Invalid request data",
-        details: error.errors
+        details: (error as any).errors
       }, 400);
     }
 

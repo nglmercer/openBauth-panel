@@ -6,16 +6,16 @@ import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import {
   validateData,
-  createValidationMiddleware,
+  validateData,
   getValidatedData,
-  type ValidationResult
+
 } from "../src/middleware/validation";
 import {
   loginSchema,
   registerSchema,
   emailValidator,
   passwordValidator,
-  usernameValidator,
+
   nameValidator
 } from "../src/schemas/validation-schemas";
 
@@ -360,7 +360,7 @@ describe("Integration Tests", () => {
 
     // Simulate middleware behavior
     let validatedData: any = null;
-    const middleware = createValidationMiddleware(loginSchema);
+
 
     // Mock the middleware execution
     const next = async () => {

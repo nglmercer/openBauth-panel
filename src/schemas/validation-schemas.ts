@@ -242,7 +242,7 @@ export const createUserSchema = z.object({
 export const mfaSetupSchema = z.object({
   mfaType: z.enum(["totp", "sms", "email"], {
     errorMap: () => ({ message: "MFA type must be 'totp', 'sms', or 'email'" })
-  }),
+  } as any),
   phoneNumber: phoneValidator,
   email: emailValidator.optional()
 }).refine((data) => {
@@ -262,7 +262,7 @@ export const mfaVerifySchema = z.object({
   code: z.string().min(6, "Code must be at least 6 characters").max(8, "Code must be 8 characters or less"),
   mfaType: z.enum(["totp", "sms", "email"], {
     errorMap: () => ({ message: "MFA type must be 'totp', 'sms', or 'email'" })
-  })
+  } as any)
 });
 
 // ==================== DEVICE SCHEMAS ====================
@@ -275,7 +275,7 @@ export const deviceSchema = z.object({
   deviceName: z.string().min(1, "Device name is required").max(100, "Device name must be 100 characters or less"),
   deviceType: z.enum(["mobile", "desktop", "tablet", "other"], {
     errorMap: () => ({ message: "Device type must be 'mobile', 'desktop', 'tablet', or 'other'" })
-  }),
+  } as any),
   platform: z.string().max(50).optional().or(z.literal("")),
   userAgent: z.string().max(500).optional().or(z.literal(""))
 });
@@ -286,7 +286,7 @@ export const deviceSchema = z.object({
 export const biometricSchema = z.object({
   biometricType: z.enum(["fingerprint", "face", "voice", "iris"], {
     errorMap: () => ({ message: "Biometric type must be 'fingerprint', 'face', 'voice', or 'iris'" })
-  }),
+  } as any),
   encryptedData: z.string().min(1, "Encrypted biometric data is required"),
   deviceId: z.string().min(1, "Device ID is required")
 });
@@ -467,3 +467,8 @@ export type CreatePermissionInput = z.infer<typeof createPermissionSchema>;
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;
 export type SearchInput = z.infer<typeof searchSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
+export type AnonymousUserInput = z.infer<typeof anonymousUserSchema>;

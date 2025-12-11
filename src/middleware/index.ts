@@ -10,7 +10,6 @@ export function createAuthMiddlewareForHono(options: {
 } = {}) {
   const factory = getServiceFactory();
   const services = factory.getServices();
-  const rolesController = services.permissionService
 
   return async (c: any, next: any) => {
     try {
@@ -94,7 +93,7 @@ export function createAuthMiddlewareForHono(options: {
             const roleId = (userRole as any).role_id;
             const roleResult = await rolesDetailsController.findById(roleId);
             if (roleResult.success && roleResult.data) {
-              roleNames.push(roleResult.data.name);
+              roleNames.push((roleResult.data as any).name);
             }
           }
 

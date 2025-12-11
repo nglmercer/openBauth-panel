@@ -234,25 +234,25 @@ export function createNestedObjectValidator(maxDepth: number = 5) {
     if (depth >= maxDepth) {
       return z.unknown();
     }
-    
+
     return z.union([
       z.string(),
       z.number(),
       z.boolean(),
       z.null(),
       z.array(createValidator(depth + 1)),
-      z.record(createValidator(depth + 1))
+      z.record(z.string(), createValidator(depth + 1))
     ]);
   };
-  
-  return z.record(createValidator(0));
+
+  return z.record(z.string(), createValidator(0));
 }
 
 /**
  * Creates a metadata validator
  */
 export const metadataValidator = z
-  .record(z.unknown())
+  .record(z.string(), z.unknown())
   .refine(
     (metadata) => JSON.stringify(metadata).length <= 10000,
     {
@@ -291,7 +291,7 @@ export function createStrictEnumValidator<T extends string>(
 ) {
   return z.enum(values, {
     errorMap: () => ({ message: message || `Value must be one of: ${values.join(", ")}` })
-  });
+  } as any);
 }
 
 // ==================== TRANSFORM UTILITIES ====================
@@ -401,14 +401,14 @@ export function createDynamicSchema<T>(
   return z.unknown().transform((data, ctx) => {
     const schema = schemaFn(data);
     const result = schema.safeParse(data);
-    
+
     if (!result.success) {
       result.error.issues.forEach(issue => {
-        ctx.addIssue(issue);
+        ctx.addIssue(issue as any);
       });
       return z.NEVER;
     }
-    
+
     return result.data;
   });
 }
