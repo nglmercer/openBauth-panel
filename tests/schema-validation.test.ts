@@ -6,7 +6,6 @@ import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import {
   validateData,
-  validateData,
   getValidatedData,
 
 } from "../src/middleware/validation";

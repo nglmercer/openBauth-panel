@@ -5,8 +5,9 @@ import { defaultLogger } from "../utils/logger";
 // import { isSystemTable } from "../utils/system-tables";
 import { BaseController } from "open-bauth";
 import { db } from "@/db";
+import type { AppVariables } from "../types/app-context";
 
-export const genericData = new Hono();
+export const genericData = new Hono<{ Variables: AppVariables }>();
 const factory = getServiceFactory();
 const services = factory.getServices();
 
@@ -72,10 +73,10 @@ genericData.use("/:tableName/*", async (c, next) => {
 
   try {
     // Store table name in context
-    (c as any).tableName = tableName;
+    c.set('tableName', tableName);
 
     // Log access for audit
-    const auth = (c as any).auth;
+    const auth = c.get('auth');
     const userId = auth?.user?.id || 'anonymous';
     await services.auditService.logApiEvent('generic.access', userId, {
       ip: c.req.header('x-forwarded-for') || 'unknown',
@@ -97,7 +98,7 @@ genericData.use("/:tableName/*", async (c, next) => {
 // GET /api/v1/data/:tableName/schema - Get table schema
 genericData.get("/:tableName/schema", async (c) => {
   try {
-    const tableName = (c as any).tableName;
+    const tableName = c.get('tableName')!;
 
     // Import dynamically to avoid circular dependencies if any
     const { getSchemas } = await import("../database/base-controller");
@@ -125,7 +126,7 @@ genericData.get("/:tableName/schema", async (c) => {
 // GET /api/v1/data/:tableName/count - Get record count (MUST BE BEFORE /:tableName/:id)
 genericData.get("/:tableName/count", async (c) => {
   try {
-    const tableName = (c as any).tableName;
+    const tableName = c.get('tableName')!;
     const controller = getController(tableName);
     const query = c.req.query();
 
@@ -163,7 +164,7 @@ genericData.get("/:tableName/count", async (c) => {
 // GET /api/v1/data/:tableName/search - Advanced search (MUST BE BEFORE /:tableName/:id)
 genericData.get("/:tableName/search", async (c) => {
   try {
-    const tableName = (c as any).tableName;
+    const tableName = c.get('tableName')!;
     const controller = getController(tableName);
     const query = c.req.query();
 
@@ -216,7 +217,7 @@ genericData.get("/:tableName/search", async (c) => {
 // GET /api/v1/data/:tableName - List records with pagination and filtering
 genericData.get("/:tableName", async (c) => {
   try {
-    const tableName = (c as any).tableName;
+    const tableName = c.get('tableName')!;
     const controller = getController(tableName);
     const query = c.req.query();
 
@@ -341,7 +342,7 @@ genericData.get("/:tableName", async (c) => {
 // GET /api/v1/data/:tableName/:id - Get single record
 genericData.get("/:tableName/:id", async (c) => {
   try {
-    const tableName = (c as any).tableName;
+    const tableName = c.get('tableName')!;
     const controller = getController(tableName);
     const id = c.req.param("id");
 
@@ -371,7 +372,7 @@ genericData.get("/:tableName/:id", async (c) => {
 // POST /api/v1/data/:tableName - Create new record
 genericData.post("/:tableName", async (c) => {
   try {
-    const tableName = (c as any).tableName;
+    const tableName = c.get('tableName')!;
     const controller = getController(tableName);
     const body = await c.req.json();
     const validated = createSchema.parse(body);
@@ -386,7 +387,7 @@ genericData.post("/:tableName", async (c) => {
     }
 
     // Log creation for audit
-    const auth = (c as any).auth;
+    const auth = c.get('auth');
     const userId = auth?.user?.id || 'anonymous';
     await services.auditService.logApiEvent('generic.create', userId, {
       ip: c.req.header('x-forwarded-for') || 'unknown',
@@ -419,7 +420,7 @@ genericData.post("/:tableName", async (c) => {
 // PUT /api/v1/data/:tableName/:id - Update record
 genericData.put("/:tableName/:id", async (c) => {
   try {
-    const tableName = (c as any).tableName;
+    const tableName = c.get('tableName')!;
     const controller = getController(tableName);
     const id = c.req.param("id");
     const body = await c.req.json();
@@ -435,7 +436,7 @@ genericData.put("/:tableName/:id", async (c) => {
     }
 
     // Log update for audit
-    const auth = (c as any).auth;
+    const auth = c.get('auth');
     const userId = auth?.user?.id || 'anonymous';
     await services.auditService.logApiEvent('generic.update', userId, {
       ip: c.req.header('x-forwarded-for') || 'unknown',
@@ -468,7 +469,7 @@ genericData.put("/:tableName/:id", async (c) => {
 // DELETE /api/v1/data/:tableName/:id - Delete record
 genericData.delete("/:tableName/:id", async (c) => {
   try {
-    const tableName = (c as any).tableName;
+    const tableName = c.get('tableName')!;
     const controller = getController(tableName);
     const id = c.req.param("id");
 
@@ -482,7 +483,7 @@ genericData.delete("/:tableName/:id", async (c) => {
     }
 
     // Log deletion for audit
-    const auth = (c as any).auth;
+    const auth = c.get('auth');
     const userId = auth?.user?.id || 'anonymous';
     await services.auditService.logApiEvent('generic.delete', userId, {
       ip: c.req.header('x-forwarded-for') || 'unknown',
@@ -507,7 +508,7 @@ genericData.delete("/:tableName/:id", async (c) => {
 // POST /api/v1/data/:tableName/bulk - Bulk operations
 genericData.post("/:tableName/bulk", async (c) => {
   try {
-    const tableName = (c as any).tableName;
+    const tableName = c.get('tableName')!;
     const controller = getController(tableName);
     const body = await c.req.json();
     const validated = bulkSchema.parse(body);
@@ -531,7 +532,7 @@ genericData.post("/:tableName/bulk", async (c) => {
     const failed = results.filter((r: any) => !r.success);
 
     // Log bulk operation for audit
-    const auth = (c as any).auth;
+    const auth = c.get('auth');
     const userId = auth?.user?.id || 'anonymous';
     await services.auditService.logApiEvent('generic.bulk.create', userId, {
       ip: c.req.header('x-forwarded-for') || 'unknown',
