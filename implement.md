@@ -1,24 +1,35 @@
 
-
 ### Estructura del Proyecto
 
 ```
 openBauth-panel/
 ├── src/
 │   ├── database/
-│   │   ├── database-initializer.ts
-│   │   ├── base-controller.ts
-│   │   └── schema/
+│   │   ├── schema/
+│   │   └── base-controller.ts
 │   ├── middleware/
 │   │   ├── auth.ts
-│   │   └── oauth-security.ts
-│   ├── services/
-│   │   ├── service-factory.ts
+│   │   ├── validation.ts
+│   │   └── index.ts
+│   ├── routes/
+│   │   ├── admin.ts
 │   │   ├── auth.ts
-│   │   ├── jwt.ts
-│   │   └── permissions.ts
+│   │   ├── generic.ts
+│   │   ├── index.ts
+│   │   ├── oauth.ts
+│   │   ├── upload.ts
+│   │   └── user.ts
+│   ├── schemas/
+│   ├── services/
+│   │   ├── audit.ts
+│   │   ├── notification.ts
+│   │   ├── rate-limit.ts
+│   │   ├── service-factory.ts
+│   │   ├── storage.ts
+│   │   └── verification.ts
 │   ├── types/
-│   ├── routes.ts
+│   ├── utils/
+│   ├── db.ts
 │   └── index.ts
 ├── tests/
 ├── scripts/
@@ -50,80 +61,103 @@ FRONTEND_URL=http://localhost:3000
 RATE_LIMIT_WINDOW=60
 RATE_LIMIT_MAX_REQUESTS=10
 ```
-### 1\. Autenticación (`/auth`)
 
-Estas rutas son públicas y manejan el acceso inicial.
+### 1. Sistema (`/`)
+
+Endpoints de utilidad y estado del sistema.
+
+| Método | Endpoint | Descripción |
+| :--- | :--- | :--- |
+| **GET** | `/api/v1/health` | Verificar estado del servicio. |
+| **GET** | `/api/v1/docs` | Documentación API y lista de endpoints activos. |
+
+-----
+
+### 2. Autenticación (`/auth`)
+
+Estas rutas manejan el acceso inicial y gestión de sesiones.
 
 | Método | Endpoint | Body (JSON) | Descripción |
 | :--- | :--- | :--- | :--- |
 | **POST** | `/api/v1/auth/signup` | `{ "email": "...", "password": "...", "first_name": "..." }` | Registrar nuevo usuario. |
-| **POST** | `/api/v1/auth/login` | `{ "email": "...", "password": "..." }` | Iniciar sesión (Devuelve JWT). |
+| **POST** | `/api/v1/auth/login` | `{ "email": "...", "password": "..." }` | Iniciar sesión (Devuelve Token). |
 | **POST** | `/api/v1/auth/anonymous` | *N/A* | Crear una sesión anónima (Guest). |
-| **POST** | `/api/v1/auth/refresh` | `{ "refreshToken": "..." }` | Rotar token de acceso usando refresh token. |
+| **POST** | `/api/v1/auth/refresh` | `{ "refreshToken": "..." }` | Renovación de token de acceso. |
 | **POST** | `/api/v1/auth/logout` | *N/A* | Revocar la sesión actual. |
+| **POST** | `/api/v1/auth/forgot-password` | `{ "email": "..." }` | Solicitar reseteo de contraseña. |
+| **POST** | `/api/v1/auth/reset-password` | `{ "token": "...", "newPassword": "..." }` | Establecer nueva contraseña. |
+| **POST** | `/api/v1/auth/verify-email` | `{ "token": "..." }` | Verificar correo electrónico. |
 
 -----
 
-### 2\. Usuario (`/user`)
+### 3. Usuario (`/user`)
 
 Rutas protegidas (requieren Header `Authorization: Bearer <token>`).
 
 | Método | Endpoint | Body (JSON) | Descripción |
 | :--- | :--- | :--- | :--- |
-| **GET** | `/api/v1/user/me` | *N/A* | Obtener perfil del usuario actual y permisos. |
+| **GET** | `/api/v1/user/me` | *N/A* | Obtener perfil del usuario, roles y configuración. |
 | **PATCH** | `/api/v1/user/me` | `{ "first_name": "...", ... }` | Actualizar datos del perfil. |
-| **POST** | `/api/v1/user/mfa/setup` | *N/A* | Iniciar configuración de MFA (2FA). |
-| **POST** | `/api/v1/user/devices` | `{ "deviceName": "..." }` | Registrar dispositivo confiable. |
-| **POST** | `/api/v1/user/biometric` | `{ "publicKey": "..." }` | Registrar Passkey/Biometría (WebAuthn). |
+| **POST** | `/api/v1/user/password` | `{ "currentPassword": "...", "newPassword": "..." }` | Cambiar contraseña. |
+| **POST** | `/api/v1/user/mfa/setup` | `{ "mfaType": "totp|sms|email", ... }` | Iniciar configuración de MFA (2FA). |
+| **POST** | `/api/v1/user/mfa/verify` | `{ "mfaType": "...", "code": "..." }` | Verificar código MFA para activar/usar. |
+| **GET** | `/api/v1/user/devices` | *N/A* | Listar dispositivos registrados. |
+| **POST** | `/api/v1/user/devices` | `{ "deviceName": "..." }` | Registrar dispositivo actual. |
+| **POST** | `/api/v1/user/biometric` | `{ "publicKey": "...", "challenge": "..." }` | Registrar Passkey/Biometría. |
 
 -----
 
-### 3\. Protocolo OAuth 2.0 / OIDC (`/oauth`)
+### 4. Protocolo OAuth 2.0 / OIDC (`/oauth`)
 
 Estándares RFC para integración con otros sistemas.
 
 | Método | Endpoint | Params / Body | Descripción |
 | :--- | :--- | :--- | :--- |
-| **GET** | `/api/v1/oauth/authorize` | `?client_id=...&redirect_uri=...` | Pantalla de consentimiento (Login social). |
-| **POST** | `/api/v1/oauth/token` | `grant_type`, `code`, `client_id`... | Intercambio de código por token (form-urlencoded). |
-| **POST** | `/api/v1/oauth/revoke` | `{ "token": "..." }` | Revocar un token específico. |
-| **POST** | `/api/v1/oauth/introspect`| `{ "token": "..." }` | Validar si un token está activo. |
+| **GET** | `/api/v1/oauth/authorize` | `?client_id=...&response_type=...` | Flujo de autorización (Login social/SSO). |
+| **POST** | `/api/v1/oauth/token` | `grant_type`, `code`... | Obtención de tokens (Code, Client Credentials, Refresh, Password). |
+| **POST** | `/api/v1/oauth/revoke` | `{ "token": "..." }` | Revocar Access/Refresh Token. |
+| **POST** | `/api/v1/oauth/introspect`| `{ "token": "..." }` | Validar metadatos de un token. |
 | **GET** | `/api/v1/oauth/jwks` | *N/A* | Obtener claves públicas (JSON Web Key Set). |
-| **GET** | `/api/v1/oauth/userinfo` | *N/A* | (Implícito en Fase 4) Datos del usuario estándar OIDC. |
+| **GET** | `/api/v1/oauth/userinfo` | *N/A* | Obtener claims del usuario (OIDC). |
 
 -----
 
-### 4\. Administración (`/admin`)
+### 5. Administración (`/admin`)
 
 Rutas protegidas con **RBAC** (Solo rol `admin`).
 
 | Método | Endpoint | Body (JSON) | Descripción |
 | :--- | :--- | :--- | :--- |
-| **GET** | `/api/v1/admin/users` | *N/A* | Listar todos los usuarios del sistema. |
-| **POST** | `/api/v1/admin/roles` | `{ "name": "editor", "permissions": [...] }` | Crear un nuevo rol en el sistema. |
+| **GET** | `/api/v1/admin/users` | *N/A* | Listar todos los usuarios. |
+| **GET** | `/api/v1/admin/roles` | *N/A* | Listar roles del sistema. |
+| **POST** | `/api/v1/admin/roles` | `{ "name": "...", "permissions": [...] }` | Crear un nuevo rol. |
+| **POST** | `/api/v1/admin/users/:id/roles` | `{ "role": "..." }` | Asignar rol a un usuario. |
+| **GET** | `/api/v1/admin/permissions` | *N/A* | Listar permisos disponibles. |
 
 -----
 
-### 5\. API Genérica / Headless CMS (`/:tableName`)
+### 6. API Genérica (`/data/:tableName`)
 
-Estas son rutas dinámicas. Reemplaza `:tableName` con el nombre de tu tabla (ej. `products`, `posts`).
+Headless CMS para gestión dinámica de tablas.
 
 | Método | Endpoint | Query Params / Body | Descripción |
 | :--- | :--- | :--- | :--- |
-| **GET** | `/api/v1/:tableName/schema` | *N/A* | Obtener la estructura/columnas de la tabla. |
-| **GET** | `/api/v1/:tableName` | `?page=1&limit=20&<campo>=<valor>` | Listar registros con paginación y filtros. |
-| **POST** | `/api/v1/:tableName` | `{ "campo": "valor", ... }` | Crear un nuevo registro en la tabla. |
-| **PATCH**| `/api/v1/:tableName/:id` | `{ "campo": "nuevo_valor" }` | Actualizar un registro específico por ID. |
+| **GET** | `/api/v1/data/:tableName` | `?page=1&limit=20&sort=col&q={filter}` | Listar registros con filtros y paginación. |
+| **GET** | `/api/v1/data/:tableName/:id` | *N/A* | Obtener un registro por ID. |
+| **POST** | `/api/v1/data/:tableName` | `{ ...data }` | Crear nuevo registro (Valida schema si existe). |
+| **PUT** | `/api/v1/data/:tableName/:id` | `{ ...data }` | Actualizar registro. |
+| **DELETE**| `/api/v1/data/:tableName/:id` | *N/A* | Eliminar registro. |
+| **GET** | `/api/v1/data/:tableName/schema` | *N/A* | Obtener estructura de la tabla. |
+| **GET** | `/api/v1/data/:tableName/count` | `?q={filter}` | Contar registros. |
+| **GET** | `/api/v1/data/:tableName/search` | `?q=text` | Búsqueda avanzada. |
+| **POST** | `/api/v1/data/:tableName/bulk` | `{ "records": [...] }` | Carga masiva de datos. |
 
 -----
 
-### 6\. Almacenamiento (Implícito en Fase 4)
+### 7. Almacenamiento (`/upload`)
 
-Aunque el código muestra el servicio, la ruta estándar REST sugerida sería:
+Gestión de archivos.
 
 | Método | Endpoint | Body (Multipart) | Descripción |
 | :--- | :--- | :--- | :--- |
-| **POST** | `/api/v1/storage/upload` | `FormData` (file, folder) | Subir archivo (Retorna URL y Key). |
-| **DELETE**| `/api/v1/storage/:key` | *N/A* | Eliminar archivo. |
-
------
+| **POST** | `/api/v1/upload` | `file` (FormData) | Subir archivo (Retorna URL y Key). |

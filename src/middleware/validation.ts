@@ -3,8 +3,8 @@
  * Provides comprehensive validation with detailed error messages
  */
 
-import { z } from "zod";
-import type { Context } from "hono";
+import { z, ZodIssueCode } from "zod";
+import type { Context, Next, MiddlewareHandler } from "hono";
 import { DatabaseErrorType } from "../types/errors";
 import { defaultLogger } from "../utils/logger";
 
@@ -92,32 +92,36 @@ function formatZodError(issue: z.ZodIssue): string {
   const path = issue.path.join(".");
 
   switch ((issue as any).code) {
-    case "invalid_type":
+    case ZodIssueCode.invalid_type:
       return `${path}: Expected ${(issue as any).expected}, received ${(issue as any).received}`;
     case "invalid_string":
-      if ((issue as any).validation === "email") {
+      const invalidStringIssue = issue as any;
+      if (invalidStringIssue.validation === "email") {
         return `${path}: Invalid email format`;
       }
-      if ((issue as any).validation === "url") {
+      if (invalidStringIssue.validation === "url") {
         return `${path}: Invalid URL format`;
       }
-      if ((issue as any).validation === "regex") {
+      if (invalidStringIssue.validation === "regex") {
         return `${path}: Invalid format`;
       }
       return `${path}: ${issue.message}`;
-    case "invalid_format":
-      if ((issue as any).format === "email") {
+    case "invalid_format" as any:
+      // Handle legacy or specific custom format codes if they exist in the Zod version used
+      // or if it's a custom issue type that mimics this struct
+      const formatIssue = issue as any;
+      if (formatIssue.format === "email") {
         return `${path}: Invalid email format`;
       }
-      if ((issue as any).format === "url") {
+      if (formatIssue.format === "url") {
         return `${path}: Invalid URL format`;
       }
       return `${path}: Invalid format`;
-    case "too_small":
+    case ZodIssueCode.too_small:
       return `${path}: Must be at least ${(issue as any).minimum} ${(issue as any).type === "string" || !(issue as any).type ? "characters" : "items"}`;
-    case "too_big":
+    case ZodIssueCode.too_big:
       return `${path}: Must be at most ${(issue as any).maximum} ${(issue as any).type === "string" || !(issue as any).type ? "characters" : "items"}`;
-    case "custom":
+    case ZodIssueCode.custom:
       return `${path}: ${issue.message}`;
     default:
       return `${path}: ${issue.message}`;
@@ -177,8 +181,8 @@ export function validateData<T>(
 export function createValidationMiddleware<T>(
   schema: z.ZodSchema<T>,
   options: ValidationOptions = {}
-) {
-  return async (c: Context, next: () => Promise<void>) => {
+): MiddlewareHandler {
+  return async (c: Context, next: Next) => {
     try {
       let data: unknown;
 
@@ -238,8 +242,8 @@ export function createValidationMiddleware<T>(
 export function createQueryValidationMiddleware<T>(
   schema: z.ZodSchema<T>,
   options: ValidationOptions = {}
-) {
-  return async (c: Context, next: () => Promise<void>) => {
+): MiddlewareHandler {
+  return async (c: Context, next: Next) => {
     try {
       const queryParams = c.req.query();
       const result = validateData(schema, queryParams, options);
@@ -277,8 +281,8 @@ export function createQueryValidationMiddleware<T>(
 export function createParamValidationMiddleware<T>(
   schema: z.ZodSchema<T>,
   options: ValidationOptions = {}
-) {
-  return async (c: Context, next: () => Promise<void>) => {
+): MiddlewareHandler {
+  return async (c: Context, next: Next) => {
     try {
       const params = c.req.param();
       const result = validateData(schema, params, options);
@@ -318,8 +322,8 @@ export function createCombinedValidationMiddleware(options: {
   query?: z.ZodSchema;
   params?: z.ZodSchema;
   validationOptions?: ValidationOptions;
-}) {
-  return async (c: Context, next: () => Promise<void>) => {
+}): MiddlewareHandler {
+  return async (c: Context, next: Next) => {
     try {
       const validationResults: Record<string, any> = {};
 

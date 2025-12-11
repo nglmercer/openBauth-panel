@@ -1,5 +1,10 @@
+import type { Context, Next, MiddlewareHandler } from "hono";
 import { getServiceFactory } from "../services/service-factory";
 import { defaultLogger } from "../utils/logger";
+import type { AuthContext } from "../types/app-context";
+import { createValidationMiddleware } from "./validation"; // Import robust validation middleware
+import type { Role } from "open-bauth";
+
 
 // Create auth middleware for Hono that wraps the open-bauth middleware
 export function createAuthMiddlewareForHono(options: {
@@ -7,11 +12,11 @@ export function createAuthMiddlewareForHono(options: {
   roles?: string[];
   permissions?: string[];
   requireAll?: boolean;
-} = {}) {
+} = {}): MiddlewareHandler {
   const factory = getServiceFactory();
   const services = factory.getServices();
 
-  return async (c: any, next: any) => {
+  return async (c: Context, next: Next) => {
     try {
       // Get authorization header
       const authHeader = c.req.header("authorization");
@@ -22,7 +27,7 @@ export function createAuthMiddlewareForHono(options: {
             error: "Authorization header required"
           }, 401);
         }
-        c.auth = { isAuthenticated: false };
+        (c as any).auth = { isAuthenticated: false };
         await next();
         return;
       }
@@ -36,7 +41,7 @@ export function createAuthMiddlewareForHono(options: {
             error: "Invalid authorization header format"
           }, 401);
         }
-        c.auth = { isAuthenticated: false };
+        (c as any).auth = { isAuthenticated: false };
         await next();
         return;
       }
@@ -50,7 +55,7 @@ export function createAuthMiddlewareForHono(options: {
             error: "Invalid or expired token"
           }, 401);
         }
-        c.auth = { isAuthenticated: false };
+        (c as any).auth = { isAuthenticated: false };
         await next();
         return;
       }
@@ -58,7 +63,7 @@ export function createAuthMiddlewareForHono(options: {
       // Get user
       const user = await services.authService.findUserById(payload.userId);
       if (user) {
-        defaultLogger.info("AuthMiddleware: User found", { id: user.id, roles: (user as any).roles });
+        defaultLogger.info("AuthMiddleware: User found", { id: user.id, roles: user.roles });
       }
       if (!user) {
         defaultLogger.warn("AuthMiddleware: User not found for id", payload.userId);
@@ -68,7 +73,7 @@ export function createAuthMiddlewareForHono(options: {
             error: "User not found"
           }, 401);
         }
-        c.auth = { isAuthenticated: false };
+        (c as any).auth = { isAuthenticated: false };
         await next();
         return;
       }
@@ -86,22 +91,22 @@ export function createAuthMiddlewareForHono(options: {
           });
 
           const userRolesList = userRolesResult.data || [];
-          const roleNames: string[] = [];
+          const Roles: Role[] = [];
 
           // Fetch role details
           for (const userRole of userRolesList) {
             const roleId = (userRole as any).role_id;
             const roleResult = await rolesDetailsController.findById(roleId);
             if (roleResult.success && roleResult.data) {
-              roleNames.push((roleResult.data as any).name);
+              Roles.push((roleResult.data as any).name);
             }
           }
 
-          (user as any).roles = roleNames;
+          user.roles = Roles;
 
         } catch (e) {
           defaultLogger.error("Failed to fetch user roles", e as Error);
-          (user as any).roles = [];
+          user.roles = [];
         }
       }
 
@@ -142,7 +147,7 @@ export function createAuthMiddlewareForHono(options: {
       }
 
       // Set auth context
-      c.auth = {
+      (c as any).auth = {
         isAuthenticated: true,
         user,
         roles: payload.roles || [],
@@ -151,6 +156,7 @@ export function createAuthMiddlewareForHono(options: {
       };
 
       await next();
+      return;
 
     } catch (error) {
       defaultLogger.error("Auth middleware error", error as Error);
@@ -162,20 +168,21 @@ export function createAuthMiddlewareForHono(options: {
         }, 401);
       }
 
-      c.auth = { isAuthenticated: false };
+      (c as any).auth = { isAuthenticated: false };
       await next();
+      return;
     }
   };
 }
 
 // Create role-based middleware using open-bauth's implementation
-export function createRoleMiddlewareForHono(roles: string[]) {
+export function createRoleMiddlewareForHono(roles: string[]): MiddlewareHandler {
   // Create a simple role check middleware
-  return async (c: any, next: any) => {
+  return async (c: Context, next: Next) => {
 
     // Check if user has required roles
-    const auth = c.auth;
-    if (!auth?.isAuthenticated) {
+    const auth = (c as any).auth as AuthContext;
+    if (!auth?.isAuthenticated || !auth.user) {
       return c.json({ success: false, error: "Authentication required" }, 401);
     }
 
@@ -191,16 +198,17 @@ export function createRoleMiddlewareForHono(roles: string[]) {
     }
 
     await next();
+    return;
   };
 }
 
 // Create permission-based middleware using open-bauth's implementation
-export function createPermissionMiddlewareForHono(permissions: string[], options: { requireAll?: boolean } = {}) {
+export function createPermissionMiddlewareForHono(permissions: string[], options: { requireAll?: boolean } = {}): MiddlewareHandler {
   // Create a simple permission check middleware
-  return async (c: any, next: any) => {
+  return async (c: Context, next: Next) => {
 
     // Check if user has required permissions
-    const auth = c.auth;
+    const auth = (c as any).auth as AuthContext;
     if (!auth?.isAuthenticated) {
       return c.json({ success: false, error: "Authentication required" }, 401);
     }
@@ -216,6 +224,7 @@ export function createPermissionMiddlewareForHono(permissions: string[], options
     }
 
     await next();
+    return;
   };
 }
 
@@ -233,10 +242,10 @@ export function createRateLimitMiddlewareForHono(options: {
   const {
     windowMs = 60 * 1000, // 1 minute
     max = 100,
-    keyGenerator = (c) => c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown'
+    keyGenerator = (c: Context) => c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown'
   } = options;
 
-  return async (c: any, next: any) => {
+  return async (c: Context, next: Next) => {
     try {
       const key = keyGenerator(c);
       const current = await services.rateLimitService.consume(key);
@@ -255,6 +264,7 @@ export function createRateLimitMiddlewareForHono(options: {
       c.header('X-RateLimit-Reset', (Date.now() + windowMs).toString());
 
       await next();
+      return;
 
     } catch (error) {
       defaultLogger.error("Rate limit middleware error", error as Error);
@@ -267,13 +277,13 @@ export function createRateLimitMiddlewareForHono(options: {
 }
 
 // Audit logging middleware for Hono
-export function createAuditMiddlewareForHono(eventType: string) {
+export function createAuditMiddlewareForHono(eventType: string): MiddlewareHandler {
   const factory = getServiceFactory();
   const services = factory.getServices();
 
-  return async (c: any, next: any) => {
+  return async (c: Context, next: Next) => {
     const startTime = Date.now();
-    const userId = c.auth?.user?.id || 'anonymous';
+    const userId = (c as any).auth?.user?.id || 'anonymous';
     const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
     const userAgent = c.req.header('user-agent') || 'unknown';
 
@@ -305,6 +315,7 @@ export function createAuditMiddlewareForHono(eventType: string) {
 
       throw error;
     }
+    return;
   };
 }
 
@@ -322,7 +333,7 @@ export function createCorsMiddlewareForHono(options: {
     headers = ['Content-Type', 'Authorization', 'X-Requested-With']
   } = options;
 
-  return async (c: any, next: any) => {
+  return async (c: Context, next: Next) => {
     const requestOrigin = c.req.header('origin');
 
     // Set CORS headers
@@ -351,12 +362,13 @@ export function createCorsMiddlewareForHono(options: {
     }
 
     await next();
+    return;
   };
 }
 
 // Security headers middleware for Hono
-export function createSecurityHeadersMiddlewareForHono() {
-  return async (c: any, next: any) => {
+export function createSecurityHeadersMiddlewareForHono(): MiddlewareHandler {
+  return async (c: Context, next: Next) => {
     // Security headers
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('X-Frame-Options', 'DENY');
@@ -365,26 +377,14 @@ export function createSecurityHeadersMiddlewareForHono() {
     c.header('Content-Security-Policy', "default-src 'self'");
 
     await next();
+    return;
   };
 }
 
 // Request validation middleware for Hono
-export function createValidationMiddlewareForHono(schema: any) {
-  return async (c: any, next: any) => {
-    try {
-      const body = await c.req.json();
-      const validated = schema.parse(body);
-      c.set('validatedBody', validated);
-      await next();
-    } catch (error) {
-      return c.json({
-        success: false,
-        error: "Validation failed",
-        details: error
-      }, 400);
-    }
-  };
-}
+// Re-exporting the robust validation logic from validation.ts
+// This replaces the simplified version that was here
+export const createValidationMiddlewareForHono = createValidationMiddleware;
 
 // Export all middleware creators
 export {

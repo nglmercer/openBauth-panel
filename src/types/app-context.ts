@@ -3,12 +3,17 @@ export interface User {
     id: string;
     email?: string;
     username?: string;
+    roles?: string[];
+    permissions?: string[];
     [key: string]: any;
 }
 
 export interface AuthContext {
     user?: User;
     token?: string;
+    isAuthenticated?: boolean;
+    roles?: string[];
+    permissions?: string[];
     [key: string]: any;
 }
 

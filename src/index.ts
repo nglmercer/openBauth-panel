@@ -40,7 +40,7 @@ async function initializeApp() {
     await dbInitializer.seedDefaults();
 
     // Ensure custom fields exist in users table
-    const db = (dbInitializer as any).database;
+    const db = dbInitializer.db;
     const customFields = ['bio', 'timezone', 'language', 'avatar_url', 'phone_number'];
     for (const field of customFields) {
       try {
@@ -160,8 +160,8 @@ process.on("SIGINT", async () => {
 
   if (dbInitializer) {
     // DatabaseInitializer doesn't have a close method, but we can close the underlying database
-    if (dbInitializer && (dbInitializer as any).database) {
-      (dbInitializer as any).database.close();
+    if (dbInitializer) {
+      dbInitializer.db.close();
     }
   }
 
@@ -173,8 +173,8 @@ process.on("SIGTERM", async () => {
 
   if (dbInitializer) {
     // DatabaseInitializer doesn't have a close method, but we can close the underlying database
-    if (dbInitializer && (dbInitializer as any).database) {
-      (dbInitializer as any).database.close();
+    if (dbInitializer) {
+      dbInitializer.db.close();
     }
   }
 

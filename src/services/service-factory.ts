@@ -14,10 +14,25 @@ import { RateLimitService } from './rate-limit';
 import { StorageService } from './storage';
 import { VerificationService } from './verification';
 
+export interface ServiceCollection {
+  dbInitializer: DatabaseInitializer;
+  jwtService: JWTServiceBun;
+  authService: AuthService;
+  permissionService: PermissionService;
+  oauthService: OAuthService;
+  securityService: SecurityService;
+  enhancedUserService: EnhancedUserService;
+  notificationService: NotificationService;
+  auditService: AuditService;
+  rateLimitService: RateLimitService;
+  storageService: StorageService;
+  verificationService: VerificationService;
+}
+
 // Service Factory for dependency injection and centralized service management
 export class ServiceFactory {
   private static instance: ServiceFactory;
-  private services: Map<string, any> = new Map();
+  private services: Map<string, unknown> = new Map();
   private _dbInitializer: DatabaseInitializer;
   private _jwtService: JWTServiceBun;
   private _authService: AuthService;
@@ -46,7 +61,7 @@ export class ServiceFactory {
   }
 
   // Get all services
-  getServices() {
+  getServices(): ServiceCollection {
     return {
       dbInitializer: this._dbInitializer,
       jwtService: this._jwtService,
@@ -145,13 +160,13 @@ export class ServiceFactory {
   }
 
   // Register custom service
-  registerService(name: string, service: any) {
+  registerService<T>(name: string, service: T): void {
     this.services.set(name, service);
   }
 
   // Get custom service
   getService<T>(name: string): T | undefined {
-    return this.services.get(name);
+    return this.services.get(name) as T | undefined;
   }
 }
 
