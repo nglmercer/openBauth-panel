@@ -20,15 +20,15 @@ const querySchema = z.object({
 });
 
 const createSchema = z.object({
-  data: z.record(z.any())
+  data: z.any()
 });
 
 const updateSchema = z.object({
-  data: z.record(z.any())
+  data: z.any()
 });
 
 const bulkSchema = z.object({
-  records: z.array(z.record(z.any()))
+  records: z.array(z.any())
 });
 
 // Store controllers in a Map for reuse

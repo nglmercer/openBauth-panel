@@ -1,6 +1,6 @@
 import {
   DatabaseInitializer,
-  JWTService,
+  JWTServiceBun,
   AuthService,
   PermissionService,
   OAuthService,
@@ -19,7 +19,7 @@ export class ServiceFactory {
   private static instance: ServiceFactory;
   private services: Map<string, any> = new Map();
   private _dbInitializer: DatabaseInitializer;
-  private _jwtService: JWTService;
+  private _jwtService: JWTServiceBun;
   private _authService: AuthService;
   private _permissionService: PermissionService;
   private _oauthService?: OAuthService;

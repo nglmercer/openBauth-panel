@@ -217,7 +217,6 @@ auth.post("/logout", createAuthMiddlewareForHono(), async (c) => {
     // Revoke refresh token if provided
     const body = await c.req.json().catch(() => ({}));
     if (body.refreshToken) {
-      // Note: JWTService doesn't have revokeRefreshToken, this would need to be implemented
       // For now, we'll just log the logout
     }
 

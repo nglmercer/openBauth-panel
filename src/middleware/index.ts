@@ -74,15 +74,35 @@ export function createAuthMiddlewareForHono(options: {
         return;
       }
 
-      // Fetch roles if not present on user object - optimized with caching
+      // Fetch roles if not present on user object
       if (!user.roles || user.roles.length === 0) {
         try {
-          const result = await rolesController.getAllRoles();
-            const roles = result;
-            (user as any).roles = roles.map((r: any) => r.name);
-          
+          // Correctly fetch roles for the specific user
+          const userRolesController = services.dbInitializer.createController("user_roles");
+          const rolesDetailsController = services.dbInitializer.createController("roles");
+
+          // Get user_role associations
+          const userRolesResult = await userRolesController.findAll({
+            where: { user_id: user.id }
+          });
+
+          const userRolesList = userRolesResult.data || [];
+          const roleNames: string[] = [];
+
+          // Fetch role details
+          for (const userRole of userRolesList) {
+            const roleId = (userRole as any).role_id;
+            const roleResult = await rolesDetailsController.findById(roleId);
+            if (roleResult.success && roleResult.data) {
+              roleNames.push(roleResult.data.name);
+            }
+          }
+
+          (user as any).roles = roleNames;
+
         } catch (e) {
           defaultLogger.error("Failed to fetch user roles", e as Error);
+          (user as any).roles = [];
         }
       }
 

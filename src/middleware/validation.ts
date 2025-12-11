@@ -35,17 +35,17 @@ export interface ValidationOptions {
    * Whether to strip unknown fields (default: true)
    */
   stripUnknown?: boolean;
-  
+
   /**
    * Whether to abort early on first error (default: false)
    */
   abortEarly?: boolean;
-  
+
   /**
    * Custom error message prefix
    */
   errorPrefix?: string;
-  
+
   /**
    * Whether to log validation errors (default: true)
    */
@@ -70,7 +70,7 @@ function createValidationError(
   options: ValidationOptions = {}
 ): ValidationError {
   const { errorPrefix = "Validation failed" } = options;
-  
+
   // Format error messages for better readability
   const formattedIssues = issues.map(issue => ({
     ...issue,
@@ -90,7 +90,7 @@ function createValidationError(
  */
 function formatZodError(issue: z.ZodIssue): string {
   const path = issue.path.join(".");
-  
+
   switch (issue.code) {
     case "invalid_type":
       return `${path}: Expected ${issue.expected}, received ${issue.received}`;
@@ -105,10 +105,18 @@ function formatZodError(issue: z.ZodIssue): string {
         return `${path}: Invalid format`;
       }
       return `${path}: ${issue.message}`;
+    case "invalid_format":
+      if ((issue as any).format === "email") {
+        return `${path}: Invalid email format`;
+      }
+      if ((issue as any).format === "url") {
+        return `${path}: Invalid URL format`;
+      }
+      return `${path}: Invalid format`;
     case "too_small":
-      return `${path}: Must be at least ${issue.minimum} ${issue.type === "string" ? "characters" : "items"}`;
+      return `${path}: Must be at least ${issue.minimum} ${issue.type === "string" || !issue.type ? "characters" : "items"}`;
     case "too_big":
-      return `${path}: Must be at most ${issue.maximum} ${issue.type === "string" ? "characters" : "items"}`;
+      return `${path}: Must be at most ${issue.maximum} ${issue.type === "string" || !issue.type ? "characters" : "items"}`;
     case "custom":
       return `${path}: ${issue.message}`;
     default:
@@ -125,7 +133,7 @@ export function validateData<T>(
   options: ValidationOptions = {}
 ): ValidationResult<T> {
   const mergedOptions = { ...defaultValidationOptions, ...options };
-  
+
   try {
     const result = schema.safeParse(data, {
       // Zod options
@@ -173,7 +181,7 @@ export function createValidationMiddleware<T>(
   return async (c: Context, next: () => Promise<void>) => {
     try {
       let data: unknown;
-      
+
       // Determine data source based on method
       if (c.req.method === "GET") {
         // For GET requests, validate query parameters
@@ -184,19 +192,19 @@ export function createValidationMiddleware<T>(
       }
 
       const result = validateData(schema, data, options);
-      
+
       if (!result.success) {
         const details = result.error?.details || [];
-        
+
         // Check if any detail contains specific messages that tests expect in the main error field
         const specificMessages = ["Phone number is required"];
         const specificDetail = details.find(detail =>
           specificMessages.some(msg => detail.message.includes(msg))
         );
-        
+
         // Use specific message if found, otherwise use generic "Validation error" for backward compatibility
         const errorMessage = specificDetail ? specificDetail.message : "Validation error";
-        
+
         return c.json({
           success: false,
           error: errorMessage,
@@ -211,7 +219,7 @@ export function createValidationMiddleware<T>(
 
       // Store validated data in context for use in route handlers
       (c as any).validatedData = result.data;
-      
+
       await next();
     } catch (error) {
       defaultLogger.error("Validation middleware error", error as Error);
@@ -234,7 +242,7 @@ export function createQueryValidationMiddleware<T>(
     try {
       const queryParams = c.req.query();
       const result = validateData(schema, queryParams, options);
-      
+
       if (!result.success) {
         return c.json({
           success: false,
@@ -249,7 +257,7 @@ export function createQueryValidationMiddleware<T>(
 
       // Store validated query parameters in context
       (c as any).validatedQuery = result.data;
-      
+
       await next();
     } catch (error) {
       defaultLogger.error("Query validation middleware error", error as Error);
@@ -272,7 +280,7 @@ export function createParamValidationMiddleware<T>(
     try {
       const params = c.req.param();
       const result = validateData(schema, params, options);
-      
+
       if (!result.success) {
         return c.json({
           success: false,
@@ -287,7 +295,7 @@ export function createParamValidationMiddleware<T>(
 
       // Store validated parameters in context
       (c as any).validatedParams = result.data;
-      
+
       await next();
     } catch (error) {
       defaultLogger.error("Parameter validation middleware error", error as Error);
@@ -316,7 +324,7 @@ export function createCombinedValidationMiddleware(options: {
       if (options.body) {
         const bodyData = await c.req.json().catch(() => ({}));
         const bodyResult = validateData(options.body, bodyData, options.validationOptions);
-        
+
         if (!bodyResult.success) {
           return c.json({
             success: false,
@@ -331,7 +339,7 @@ export function createCombinedValidationMiddleware(options: {
       if (options.query) {
         const queryData = c.req.query();
         const queryResult = validateData(options.query, queryData, options.validationOptions);
-        
+
         if (!queryResult.success) {
           return c.json({
             success: false,
@@ -346,7 +354,7 @@ export function createCombinedValidationMiddleware(options: {
       if (options.params) {
         const paramsData = c.req.param();
         const paramsResult = validateData(options.params, paramsData, options.validationOptions);
-        
+
         if (!paramsResult.success) {
           return c.json({
             success: false,
@@ -359,7 +367,7 @@ export function createCombinedValidationMiddleware(options: {
 
       // Store all validated data in context
       (c as any).validatedData = validationResults;
-      
+
       await next();
     } catch (error) {
       defaultLogger.error("Combined validation middleware error", error as Error);

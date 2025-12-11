@@ -183,8 +183,8 @@ export const verifyEmailSchema = z.object({
  * Anonymous user creation schema
  */
 export const anonymousUserSchema = z.object({
-  sessionData: z.record(z.unknown()).optional(),
-  preferences: z.record(z.unknown()).optional()
+  sessionData: z.any().optional(),
+  preferences: z.any().optional()
 });
 
 // ==================== USER SCHEMAS ====================
@@ -387,7 +387,7 @@ export const searchSchema = z.object({
   search: z.string().optional(),
   sortBy: z.string().optional(),
   sortOrder: z.enum(["asc", "desc"]).optional().default("asc"),
-  filters: z.record(z.unknown()).optional()
+  filters: z.any().optional()
 });
 
 /**
@@ -410,26 +410,26 @@ export const schemas = {
     verifyEmail: verifyEmailSchema,
     anonymous: anonymousUserSchema
   },
-  
+
   // User schemas
   user: {
     updateProfile: updateProfileSchema,
     updatePassword: updatePasswordSchema,
     create: createUserSchema
   },
-  
+
   // MFA schemas
   mfa: {
     setup: mfaSetupSchema,
     verify: mfaVerifySchema
   },
-  
+
   // Device schemas
   device: {
     register: deviceSchema,
     biometric: biometricSchema
   },
-  
+
   // Permission & Role schemas
   permission: {
     create: createPermissionSchema,
@@ -439,13 +439,13 @@ export const schemas = {
     create: createRoleSchema,
     update: updateRoleSchema
   },
-  
+
   // OAuth schemas
   oauth: {
     createClient: createOAuthClientSchema,
     authorization: authorizationRequestSchema
   },
-  
+
   // Utility schemas
   utility: {
     pagination: paginationSchema,
