@@ -1,9 +1,12 @@
 import type { Context, Next, MiddlewareHandler } from "hono";
 import { getServiceFactory } from "../services/service-factory";
 import { defaultLogger } from "../utils/logger";
-import type { AuthContext } from "../types/app-context";
+import type { AuthContext, AppEnv } from "../types/app-context";
 import { createValidationMiddleware } from "./validation"; // Import robust validation middleware
 import type { Role } from "open-bauth";
+
+// Helper type for backward compatibility where auth is accessed directly on context
+type HonoContextWithAuth = Context<AppEnv> & { auth?: AuthContext };
 
 
 // Create auth middleware for Hono that wraps the open-bauth middleware
@@ -12,11 +15,10 @@ export function createAuthMiddlewareForHono(options: {
   roles?: string[];
   permissions?: string[];
   requireAll?: boolean;
-} = {}): MiddlewareHandler {
+} = {}): MiddlewareHandler<AppEnv> {
   const factory = getServiceFactory();
   const services = factory.getServices();
-
-  return async (c: Context, next: Next) => {
+  return async (c: Context<AppEnv>, next: Next) => {
     try {
       // Get authorization header
       const authHeader = c.req.header("authorization");
@@ -27,7 +29,11 @@ export function createAuthMiddlewareForHono(options: {
             error: "Authorization header required"
           }, 401);
         }
-        (c as any).auth = { isAuthenticated: false };
+        const authInfo: AuthContext = { isAuthenticated: false };
+        c.set('auth', authInfo);
+        // Backward compatibility
+        (c as HonoContextWithAuth).auth = authInfo;
+
         await next();
         return;
       }
@@ -41,7 +47,11 @@ export function createAuthMiddlewareForHono(options: {
             error: "Invalid authorization header format"
           }, 401);
         }
-        (c as any).auth = { isAuthenticated: false };
+
+        const authInfo: AuthContext = { isAuthenticated: false };
+        c.set('auth', authInfo);
+        (c as HonoContextWithAuth).auth = authInfo;
+
         await next();
         return;
       }
@@ -55,7 +65,11 @@ export function createAuthMiddlewareForHono(options: {
             error: "Invalid or expired token"
           }, 401);
         }
-        (c as any).auth = { isAuthenticated: false };
+
+        const authInfo: AuthContext = { isAuthenticated: false };
+        c.set('auth', authInfo);
+        (c as HonoContextWithAuth).auth = authInfo;
+
         await next();
         return;
       }
@@ -73,7 +87,11 @@ export function createAuthMiddlewareForHono(options: {
             error: "User not found"
           }, 401);
         }
-        (c as any).auth = { isAuthenticated: false };
+
+        const authInfo: AuthContext = { isAuthenticated: false };
+        c.set('auth', authInfo);
+        (c as HonoContextWithAuth).auth = authInfo;
+
         await next();
         return;
       }
@@ -145,15 +163,26 @@ export function createAuthMiddlewareForHono(options: {
           }, 403);
         }
       }
+      const userRoles = await services.authService.getUserRoles(user.id);
+      let userPermissions: string[] = [];
+      for (const role of userRoles) {
+        const rolePermissions =
+          await services.permissionService.getRolePermissions(role.id);
+        userPermissions.push(...rolePermissions.map((p) => p.name));
+      }
 
       // Set auth context
-      (c as any).auth = {
+      const authContext: AuthContext = {
         isAuthenticated: true,
         user,
-        roles: payload.roles || [],
-        permissions: (payload as any).permissions || [],
+        roles: userRoles.map((role) => role.name),
+        permissions: userPermissions,
         token
       };
+
+      c.set('auth', authContext);
+      // Backward compatibility
+      (c as HonoContextWithAuth).auth = authContext;
 
       await next();
       return;
@@ -168,7 +197,9 @@ export function createAuthMiddlewareForHono(options: {
         }, 401);
       }
 
-      (c as any).auth = { isAuthenticated: false };
+      const authInfo: AuthContext = { isAuthenticated: false };
+      c.set('auth', authInfo);
+      (c as HonoContextWithAuth).auth = authInfo;
       await next();
       return;
     }
@@ -176,12 +207,13 @@ export function createAuthMiddlewareForHono(options: {
 }
 
 // Create role-based middleware using open-bauth's implementation
-export function createRoleMiddlewareForHono(roles: string[]): MiddlewareHandler {
+export function createRoleMiddlewareForHono(roles: string[]): MiddlewareHandler<AppEnv> {
   // Create a simple role check middleware
   return async (c: Context, next: Next) => {
 
     // Check if user has required roles
-    const auth = (c as any).auth as AuthContext;
+    // Try to get from c.get('auth') first, then fall back to c.auth
+    const auth = c.get('auth') || (c as HonoContextWithAuth).auth;
     if (!auth?.isAuthenticated || !auth.user) {
       return c.json({ success: false, error: "Authentication required" }, 401);
     }
@@ -203,12 +235,12 @@ export function createRoleMiddlewareForHono(roles: string[]): MiddlewareHandler 
 }
 
 // Create permission-based middleware using open-bauth's implementation
-export function createPermissionMiddlewareForHono(permissions: string[], options: { requireAll?: boolean } = {}): MiddlewareHandler {
+export function createPermissionMiddlewareForHono(permissions: string[], options: { requireAll?: boolean } = {}): MiddlewareHandler<AppEnv> {
   // Create a simple permission check middleware
   return async (c: Context, next: Next) => {
 
     // Check if user has required permissions
-    const auth = (c as any).auth as AuthContext;
+    const auth = c.get('auth') || (c as HonoContextWithAuth).auth;
     if (!auth?.isAuthenticated) {
       return c.json({ success: false, error: "Authentication required" }, 401);
     }
@@ -232,7 +264,7 @@ export function createPermissionMiddlewareForHono(permissions: string[], options
 export function createRateLimitMiddlewareForHono(options: {
   windowMs?: number;
   max?: number;
-  keyGenerator?: (c: any) => string;
+  keyGenerator?: (c: Context<AppEnv>) => string;
   skipSuccessfulRequests?: boolean;
   skipFailedRequests?: boolean;
 } = {}) {
@@ -242,10 +274,10 @@ export function createRateLimitMiddlewareForHono(options: {
   const {
     windowMs = 60 * 1000, // 1 minute
     max = 100,
-    keyGenerator = (c: Context) => c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown'
+    keyGenerator = (c: Context<AppEnv>) => c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown'
   } = options;
 
-  return async (c: Context, next: Next) => {
+  return async (c: Context<AppEnv>, next: Next) => {
     try {
       const key = keyGenerator(c);
       const current = await services.rateLimitService.consume(key);
@@ -277,13 +309,14 @@ export function createRateLimitMiddlewareForHono(options: {
 }
 
 // Audit logging middleware for Hono
-export function createAuditMiddlewareForHono(eventType: string): MiddlewareHandler {
+export function createAuditMiddlewareForHono(eventType: string): MiddlewareHandler<AppEnv> {
   const factory = getServiceFactory();
   const services = factory.getServices();
 
-  return async (c: Context, next: Next) => {
+  return async (c: Context<AppEnv>, next: Next) => {
     const startTime = Date.now();
-    const userId = (c as any).auth?.user?.id || 'anonymous';
+    const auth = c.get('auth') || (c as HonoContextWithAuth).auth;
+    const userId = auth?.user?.id || 'anonymous';
     const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
     const userAgent = c.req.header('user-agent') || 'unknown';
 

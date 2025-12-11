@@ -3,15 +3,20 @@
  * Provides comprehensive validation with detailed error messages
  */
 
-import { z, ZodIssueCode } from "zod";
+import { z } from "zod";
 import type { Context, Next, MiddlewareHandler } from "hono";
 import { DatabaseErrorType } from "../types/errors";
 import { defaultLogger } from "../utils/logger";
 
+import type { AppEnv } from "../types/app-context";
+
+// Extract ZodIssue type from ZodError to avoid using deprecated ZodIssue type directly
+type ZodIssue = z.ZodError["issues"][number];
+
 /**
  * Validation result interface
  */
-export interface ValidationResult<T = any> {
+export interface ValidationResult<T = unknown> {
   success: boolean;
   data?: T;
   error?: ValidationError;
@@ -22,7 +27,7 @@ export interface ValidationResult<T = any> {
  */
 export interface ValidationError {
   message: string;
-  details: z.ZodIssue[];
+  details: ZodIssue[];
   type: string;
   statusCode: number;
 }
@@ -66,7 +71,7 @@ const defaultValidationOptions: ValidationOptions = {
  * Creates a validation error from Zod issues
  */
 function createValidationError(
-  issues: z.ZodIssue[],
+  issues: ZodIssue[],
   options: ValidationOptions = {}
 ): ValidationError {
   const { errorPrefix = "Validation failed" } = options;
@@ -88,40 +93,41 @@ function createValidationError(
 /**
  * Formats a Zod error message for better readability
  */
-function formatZodError(issue: z.ZodIssue): string {
+function formatZodError(issue: ZodIssue): string {
   const path = issue.path.join(".");
 
-  switch ((issue as any).code) {
-    case ZodIssueCode.invalid_type:
-      return `${path}: Expected ${(issue as any).expected}, received ${(issue as any).received}`;
-    case "invalid_string":
-      const invalidStringIssue = issue as any;
-      if (invalidStringIssue.validation === "email") {
+  switch (issue.code) {
+    case "invalid_type":
+      if ("expected" in issue && "received" in issue) {
+        return `${path}: Expected ${issue.expected}, received ${issue.received}`;
+      }
+      return `${path}: Invalid type`;
+    case "invalid_format":
+      // Handle validation formats (support both validation and format properties for compatibility)
+      const validation = "validation" in issue ? issue.validation : ("format" in issue ? issue.format : undefined);
+
+      if (validation === "email") {
         return `${path}: Invalid email format`;
       }
-      if (invalidStringIssue.validation === "url") {
+      if (validation === "url") {
         return `${path}: Invalid URL format`;
       }
-      if (invalidStringIssue.validation === "regex") {
+      if (validation === "regex") {
         return `${path}: Invalid format`;
       }
-      return `${path}: ${issue.message}`;
-    case "invalid_format" as any:
-      // Handle legacy or specific custom format codes if they exist in the Zod version used
-      // or if it's a custom issue type that mimics this struct
-      const formatIssue = issue as any;
-      if (formatIssue.format === "email") {
-        return `${path}: Invalid email format`;
+
+      return issue.message ? `${path}: ${issue.message}` : `${path}: Invalid format`;
+    case "too_small":
+      if ("minimum" in issue && "type" in issue) {
+        return `${path}: Must be at least ${issue.minimum} ${issue.type === "string" || !issue.type ? "characters" : "items"}`;
       }
-      if (formatIssue.format === "url") {
-        return `${path}: Invalid URL format`;
+      return `${path}: Value too small`;
+    case "too_big":
+      if ("maximum" in issue && "type" in issue) {
+        return `${path}: Must be at most ${issue.maximum} ${issue.type === "string" || !issue.type ? "characters" : "items"}`;
       }
-      return `${path}: Invalid format`;
-    case ZodIssueCode.too_small:
-      return `${path}: Must be at least ${(issue as any).minimum} ${(issue as any).type === "string" || !(issue as any).type ? "characters" : "items"}`;
-    case ZodIssueCode.too_big:
-      return `${path}: Must be at most ${(issue as any).maximum} ${(issue as any).type === "string" || !(issue as any).type ? "characters" : "items"}`;
-    case ZodIssueCode.custom:
+      return `${path}: Value too big`;
+    case "custom":
       return `${path}: ${issue.message}`;
     default:
       return `${path}: ${issue.message}`;
@@ -181,7 +187,7 @@ export function validateData<T>(
 export function createValidationMiddleware<T>(
   schema: z.ZodSchema<T>,
   options: ValidationOptions = {}
-): MiddlewareHandler {
+): MiddlewareHandler<AppEnv> {
   return async (c: Context, next: Next) => {
     try {
       let data: unknown;
@@ -222,7 +228,7 @@ export function createValidationMiddleware<T>(
       }
 
       // Store validated data in context for use in route handlers
-      (c as any).validatedData = result.data;
+      c.set('validatedData', result.data);
 
       await next();
       return;
@@ -242,7 +248,7 @@ export function createValidationMiddleware<T>(
 export function createQueryValidationMiddleware<T>(
   schema: z.ZodSchema<T>,
   options: ValidationOptions = {}
-): MiddlewareHandler {
+): MiddlewareHandler<AppEnv> {
   return async (c: Context, next: Next) => {
     try {
       const queryParams = c.req.query();
@@ -261,7 +267,7 @@ export function createQueryValidationMiddleware<T>(
       }
 
       // Store validated query parameters in context
-      (c as any).validatedQuery = result.data;
+      c.set('validatedQuery', result.data);
 
       await next();
       return;
@@ -281,7 +287,7 @@ export function createQueryValidationMiddleware<T>(
 export function createParamValidationMiddleware<T>(
   schema: z.ZodSchema<T>,
   options: ValidationOptions = {}
-): MiddlewareHandler {
+): MiddlewareHandler<AppEnv> {
   return async (c: Context, next: Next) => {
     try {
       const params = c.req.param();
@@ -300,7 +306,7 @@ export function createParamValidationMiddleware<T>(
       }
 
       // Store validated parameters in context
-      (c as any).validatedParams = result.data;
+      c.set('validatedParams', result.data);
 
       await next();
       return;
@@ -322,7 +328,7 @@ export function createCombinedValidationMiddleware(options: {
   query?: z.ZodSchema;
   params?: z.ZodSchema;
   validationOptions?: ValidationOptions;
-}): MiddlewareHandler {
+}): MiddlewareHandler<AppEnv> {
   return async (c: Context, next: Next) => {
     try {
       const validationResults: Record<string, any> = {};
@@ -373,7 +379,7 @@ export function createCombinedValidationMiddleware(options: {
       }
 
       // Store all validated data in context
-      (c as any).validatedData = validationResults;
+      c.set('validatedData', validationResults);
 
       await next();
       return;
@@ -390,22 +396,22 @@ export function createCombinedValidationMiddleware(options: {
 /**
  * Helper function to get validated data from context
  */
-export function getValidatedData<T>(c: Context): T {
-  return (c as any).validatedData;
+export function getValidatedData<T>(c: Context<AppEnv>): T {
+  return c.get('validatedData');
 }
 
 /**
  * Helper function to get validated query parameters from context
  */
-export function getValidatedQuery<T>(c: Context): T {
-  return (c as any).validatedQuery;
+export function getValidatedQuery<T>(c: Context<AppEnv>): T {
+  return c.get('validatedQuery');
 }
 
 /**
  * Helper function to get validated parameters from context
  */
-export function getValidatedParams<T>(c: Context): T {
-  return (c as any).validatedParams;
+export function getValidatedParams<T>(c: Context<AppEnv>): T {
+  return c.get('validatedParams');
 }
 
 /**
@@ -436,6 +442,3 @@ export function createCustomValidator<T>(
     }
   };
 }
-
-// Export types for better TypeScript support
-// Export types for better TypeScript support

@@ -77,7 +77,7 @@ admin.post("/roles", async (c) => {
         return c.json({ success: true, role: result.data }, 201);
     } catch (error) {
         if (error instanceof z.ZodError) {
-            return c.json({ success: false, error: "Validation error", details: (error as any).errors }, 400);
+            return c.json({ success: false, error: "Validation error", details: error.message }, 400);
         }
         defaultLogger.error("Create role error", error as Error);
         return c.json({ success: false, error: "Internal server error" }, 500);
@@ -138,7 +138,7 @@ admin.post("/users/:id/roles", async (c) => {
 
     } catch (error) {
         if (error instanceof z.ZodError) {
-            return c.json({ success: false, error: "Validation error", details: (error as any).errors }, 400);
+            return c.json({ success: false, error: "Validation error", details: error.message }, 400);
         }
         defaultLogger.error("Assign role error", error as Error);
         return c.json({ success: false, error: "Failed to assign role" }, 500);

@@ -1,12 +1,4 @@
-
-export interface User {
-    id: string;
-    email?: string;
-    username?: string;
-    roles?: string[];
-    permissions?: string[];
-    [key: string]: any;
-}
+import type { User } from "open-bauth";
 
 export interface AuthContext {
     user?: User;
@@ -32,3 +24,7 @@ export interface AppVariables {
     // Additional context
     [key: string]: any;
 }
+
+export type AppEnv = {
+    Variables: AppVariables;
+};
