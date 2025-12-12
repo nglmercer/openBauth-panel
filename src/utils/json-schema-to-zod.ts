@@ -172,6 +172,21 @@ export function validateJsonSchema(jsonSchema: any): { valid: boolean; errors: s
   const errors: string[] = [];
 
   try {
+    // First validate that the JSON Schema has valid structure
+    if (!jsonSchema || typeof jsonSchema !== 'object') {
+      errors.push('JSON Schema must be an object');
+      return { valid: false, errors };
+    }
+
+    // Validate type field if present
+    if (jsonSchema.type && typeof jsonSchema.type === 'string') {
+      const validTypes = ['string', 'number', 'integer', 'boolean', 'array', 'object', 'null'];
+      if (!validTypes.includes(jsonSchema.type)) {
+        errors.push(`Invalid JSON Schema type: "${jsonSchema.type}". Valid types are: ${validTypes.join(', ')}`);
+        return { valid: false, errors };
+      }
+    }
+
     const zodSchema = jsonSchemaToZod(jsonSchema);
     
     // Test basic conversion

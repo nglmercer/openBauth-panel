@@ -65,6 +65,7 @@ describe("JSON Schema to Zod Converter", () => {
         };
 
         const result = validateJsonSchema(invalidSchema);
+        console.log("result",result)
         expect(result.valid).toBe(false);
         expect(result.errors.length).toBeGreaterThan(0);
     });
