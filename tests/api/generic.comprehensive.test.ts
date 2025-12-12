@@ -75,9 +75,9 @@ describe("Generic Data API - Comprehensive Tests", () => {
         }, TEST_TIMEOUTS.MEDIUM);
     });
 
-    describe("GET /data/:tableName/schema", () => {
+    describe("GET /data/:tableName/schemaInfo", () => {
         test("should return table schema", async () => {
-            const response = await fetch(`${baseUrl}/data/test_products/schema`, {
+            const response = await fetch(`${baseUrl}/data/test_products/schemaInfo`, {
                 headers: { "Authorization": `Bearer ${authToken}` }
             });
 

@@ -6,8 +6,8 @@ import { defaultLogger } from "../utils/logger";
 import { BaseController } from "open-bauth";
 import { db } from "@/db";
 import type { AppVariables } from "../types/app-context";
-import  {type TableSchema,SQLiteSchemaExtractor } from "open-bauth";
-
+import  {type TableSchema } from "open-bauth";
+import { getZodSchema,getSchemas,extractor,getDefaultSchemas } from '../database/base-controller';
 export const genericData = new Hono<{ Variables: AppVariables }>();
 const factory = getServiceFactory();
 const services = factory.getServices();
@@ -99,11 +99,7 @@ genericData.use("/:tableName/*", async (c, next) => {
 // GET /api/v1/data/:tableName/schema - Get table schema
 genericData.get("/:tableName/schema", async (c) => {
   try {
-    const tableName = c.get('tableName')!;
-
-    // Import dynamically to avoid circular dependencies if any
-    const { getDefaultSchemas, getZodSchema } = await import("../database/base-controller");
-    
+    const tableName = c.get('tableName')!;    
     let tableSchema: TableSchema;
     let zodSchema:  z.ZodObject<any, z.core.$strip>;
 
@@ -112,14 +108,10 @@ genericData.get("/:tableName/schema", async (c) => {
     const schemaResponse = allSchemas.find((s) => s.tableName === tableName);
 
     if (schemaResponse) {
-      tableSchema = schemaResponse;
+      tableSchema = schemaResponse as TableSchema;
       // Generate Zod schema from registered TableSchema
       zodSchema = getZodSchema(tableSchema);
-    } else {
-      // If not found in registered schemas, try to generate dynamically from database
-      const extractor = new SQLiteSchemaExtractor(db);
-      
-      // Get table info from database
+    } else {      
       const tableInfo = await extractor.getTableInfo(tableName);
       if (!tableInfo) {
         return c.json({ success: false, error: "Schema not found for table" }, 404);
@@ -168,6 +160,28 @@ genericData.get("/:tableName/schema", async (c) => {
     }, 500);
   }
 });
+// GET /api/v1/data/:tableName/schemaInfo - Get table schemaInfo
+genericData.get("/:tableName/schemaInfo", async (c) => {
+  try {
+    const tableName = c.get('tableName')!;    
+    // First try to get from registered schemas
+    const allSchemas = await getSchemas();
+    const schemaResponse = allSchemas.find((s) => s.tableName === tableName);
+    return c.json({
+      success: true,
+      schema: schemaResponse
+    });
+  }catch(e){
+    defaultLogger.error("SchemaInfo retrieval error", e as Error);
+    return c.json({
+      success: false,
+      error: "Failed to retrieve table schemaInfo"
+    }, 500);
+  }
+
+})
+
+
 
 // GET /api/v1/data/:tableName/count - Get record count (MUST BE BEFORE /:tableName/:id)
 genericData.get("/:tableName/count", async (c) => {
