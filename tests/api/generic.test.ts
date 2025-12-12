@@ -131,4 +131,58 @@ describe("Generic Data API", () => {
 
     }, TEST_TIMEOUTS.MEDIUM);
 
+    test("should return JSON Schema for test_items table", async () => {
+        const userData = testUtils.generateTestUser();
+        const signupResponse = await fetch(`${baseUrl}/auth/signup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(userData)
+        });
+        const signupResult = await signupResponse.json() as any;
+        const token = signupResult.token;
+
+        // Get schema for test_items table
+        const schemaResponse = await fetch(`${baseUrl}/data/test_items/schema`, {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        if (schemaResponse.status !== 200) {
+            console.log("Schema retrieval error:", await schemaResponse.text());
+        }
+        expect(schemaResponse.status).toBe(200);
+        
+        const result = await schemaResponse.json() as any;
+        expect(result.success).toBe(true);
+        expect(result.schema).toBeDefined();
+        
+        // Verify it's a valid JSON Schema
+        const jsonSchema = result.schema;
+        expect(jsonSchema.type).toBe('object');
+        expect(jsonSchema.properties).toBeDefined();
+        expect(jsonSchema.properties.id).toBeDefined();
+        expect(jsonSchema.properties.name).toBeDefined();
+        expect(jsonSchema.properties.value).toBeDefined();
+        expect(jsonSchema.properties.created_at).toBeDefined();
+        
+        console.log("JSON Schema for test_items:", JSON.stringify(jsonSchema, null, 2));
+        
+        // Verify field types (more flexible validation for complex schemas)
+        expect(jsonSchema.properties.id.type).toBe('string');
+        expect(jsonSchema.properties.name.type).toBe('string');
+        
+        // value field can be number or null (using anyOf)
+        expect(jsonSchema.properties.value).toBeDefined();
+        expect(jsonSchema.properties.value.anyOf || jsonSchema.properties.value.type).toBeDefined();
+        
+        // created_at field has complex structure with date-time format
+        expect(jsonSchema.properties.created_at).toBeDefined();
+        expect(jsonSchema.properties.created_at.anyOf || jsonSchema.properties.created_at.type).toBeDefined();
+        
+        // Verify the JSON Schema has proper structure
+        expect(jsonSchema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
+        expect(Array.isArray(jsonSchema.required)).toBe(true);
+        expect(jsonSchema.additionalProperties).toBe(false);
+    }, TEST_TIMEOUTS.MEDIUM);
+
+
 });

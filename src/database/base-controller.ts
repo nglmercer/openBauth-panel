@@ -8,3 +8,7 @@ export async function getSchemas():Promise<TableInfo[]> {
 export function getDefaultSchemas():TableSchema[]{
     return dbInitializer.getSchemas();
 }
+export function getZodSchema(schemas:TableSchema){
+        const extractor = new SQLiteSchemaExtractor(db);
+    return extractor.generateZodSchema(schemas)
+}

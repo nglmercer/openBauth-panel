@@ -6,6 +6,7 @@ import { defaultLogger } from "../utils/logger";
 import { BaseController } from "open-bauth";
 import { db } from "@/db";
 import type { AppVariables } from "../types/app-context";
+import  {type TableSchema,SQLiteSchemaExtractor } from "open-bauth";
 
 export const genericData = new Hono<{ Variables: AppVariables }>();
 const factory = getServiceFactory();
@@ -101,17 +102,62 @@ genericData.get("/:tableName/schema", async (c) => {
     const tableName = c.get('tableName')!;
 
     // Import dynamically to avoid circular dependencies if any
-    const { getSchemas } = await import("../database/base-controller");
-    const allSchemas = await getSchemas();
-    const tableSchema = allSchemas.find((s: any) => s.tableName === tableName);
+    const { getDefaultSchemas, getZodSchema } = await import("../database/base-controller");
+    
+    let tableSchema: TableSchema;
+    let zodSchema:  z.ZodObject<any, z.core.$strip>;
 
-    if (!tableSchema) {
-      return c.json({ success: false, error: "Schema not found for table" }, 404);
+    // First try to get from registered schemas
+    const allSchemas = getDefaultSchemas();
+    const schemaResponse = allSchemas.find((s) => s.tableName === tableName);
+
+    if (schemaResponse) {
+      tableSchema = schemaResponse;
+      // Generate Zod schema from registered TableSchema
+      zodSchema = getZodSchema(tableSchema);
+    } else {
+      // If not found in registered schemas, try to generate dynamically from database
+      const extractor = new SQLiteSchemaExtractor(db);
+      
+      // Get table info from database
+      const tableInfo = await extractor.getTableInfo(tableName);
+      if (!tableInfo) {
+        return c.json({ success: false, error: "Schema not found for table" }, 404);
+      }
+      
+      // Convert TableInfo to TableSchema
+      const dynamicTableSchema: TableSchema = {
+        tableName: tableInfo.tableName,
+        columns: tableInfo.columns.map(col => ({
+          name: col.name,
+          type: col.type as any, // Type assertion to handle ColumnType compatibility
+          primaryKey: col.pk === 1,
+          notNull: col.notnull === 1,
+          defaultValue: col.dflt_value
+        }))
+      };
+      
+      // Generate Zod schema dynamically from table schema
+      zodSchema = extractor.generateZodSchema(dynamicTableSchema);
     }
+
+    // Convert Zod schema to JSON Schema
+    // Handle unrepresentable types like Date by converting them to any
+    const jsonSchema = z.toJSONSchema(zodSchema, {
+      unrepresentable: "any",
+      override: (ctx) => {
+        // Custom handling for Date types - convert to string with date-time format
+        const def = ctx.zodSchema._zod?.def;
+        if (def && def.type === "date") {
+          ctx.jsonSchema.type = "string";
+          ctx.jsonSchema.format = "date-time";
+        }
+      }
+    });
 
     return c.json({
       success: true,
-      schema: tableSchema
+      schema: jsonSchema
     });
 
   } catch (error) {
