@@ -16,7 +16,7 @@ describe("Main API Endpoints", () => {
     });
 
     afterEach(async () => {
-        server.stop();
+        server?.stop();
     });
 
     describe("GET /health", () => {

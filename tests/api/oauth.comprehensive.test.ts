@@ -43,7 +43,7 @@ describe("OAuth API - Comprehensive Tests", () => {
     });
 
     afterEach(() => {
-        if (server) server.stop();
+        if (server) server?.stop();
     });
 
     async function createTestUser() {

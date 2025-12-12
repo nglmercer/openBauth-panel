@@ -17,7 +17,7 @@ describe("Authentication API", () => {
   });
 
   afterEach(async () => {
-    server.stop();
+    server?.stop();
   });
 
   test("should register a new user successfully", async () => {

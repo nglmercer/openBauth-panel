@@ -13,11 +13,12 @@ import { AuditService } from './audit';
 import { RateLimitService } from './rate-limit';
 import { StorageService } from './storage';
 import { VerificationService } from './verification';
+import { ExtendedAuthService } from './extended-auth';
 
 export interface ServiceCollection {
   dbInitializer: DatabaseInitializer;
   jwtService: JWTServiceBun;
-  authService: AuthService;
+  authService: ExtendedAuthService;
   permissionService: PermissionService;
   oauthService: OAuthService;
   securityService: SecurityService;
@@ -35,7 +36,7 @@ export class ServiceFactory {
   private services: Map<string, unknown> = new Map();
   private _dbInitializer: DatabaseInitializer;
   private _jwtService: JWTServiceBun;
-  private _authService: AuthService;
+  private _authService: ExtendedAuthService;
   private _permissionService: PermissionService;
   private _oauthService?: OAuthService;
   private _securityService?: SecurityService;
@@ -46,16 +47,19 @@ export class ServiceFactory {
   private _storageService?: StorageService;
   private _verificationService?: VerificationService;
 
-  private constructor() {
-    this._dbInitializer = dbInitializer;
-    this._jwtService = jwtService;
-    this._authService = authService;
-    this._permissionService = permissionService;
+  private constructor(dbInitializerParam?: DatabaseInitializer) {
+    this._dbInitializer = dbInitializerParam || dbInitializer;
+    this._jwtService = dbInitializerParam ? new JWTServiceBun(process.env["JWT_SECRET"] || "dev-secret", "7d") : jwtService;
+    this._authService = new ExtendedAuthService(this._dbInitializer, this._jwtService);
+    this._permissionService = dbInitializerParam ? new PermissionService(this._dbInitializer) : permissionService;
   }
 
-  static getInstance(): ServiceFactory {
+  static getInstance(dbInitializerParam?: DatabaseInitializer): ServiceFactory {
     if (!ServiceFactory.instance) {
-      ServiceFactory.instance = new ServiceFactory();
+      ServiceFactory.instance = new ServiceFactory(dbInitializerParam);
+    } else if (dbInitializerParam) {
+      // Si se proporciona un dbInitializer diferente, crear una nueva instancia
+      ServiceFactory.instance = new ServiceFactory(dbInitializerParam);
     }
     return ServiceFactory.instance;
   }
@@ -92,7 +96,7 @@ export class ServiceFactory {
         this._dbInitializer,
         this.getSecurityService(),
         this._jwtService,
-        this._authService
+        this._authService as any // Cast necesario para compatibilidad
       );
     }
     return this._oauthService;
@@ -171,4 +175,4 @@ export class ServiceFactory {
 }
 
 // Export singleton instance
-export const getServiceFactory = () => ServiceFactory.getInstance();
+export const getServiceFactory = (dbInitializerParam?: DatabaseInitializer) => ServiceFactory.getInstance(dbInitializerParam);

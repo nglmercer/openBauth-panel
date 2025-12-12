@@ -1,7 +1,7 @@
 /**
  * OAuth 2.0 Refactored Router Example
  *
- * This is a cleaned up version of the original OAuth router implementation
+ * This is a cleaned up version of original OAuth router implementation
  * with better error handling, structure, and maintainability
  */
 
@@ -371,7 +371,7 @@ async function handleAuthorizationCodeGrant(validated: any, client: any) {
   if (validated.redirect_uri !== authCode.redirect_uri) {
     return {
       error: "invalid_grant",
-      error_description: "Redirect URI does not match the authorization request"
+      error_description: "Redirect URI does not match authorization request"
     };
   }
 
@@ -641,13 +641,19 @@ async function createRefreshTokenRecord(token: string, userId: string, clientId:
 
 async function getOrCreateTestUser() {
   try {
-    // First try to find an existing test user
-    const testUsers = await services.authService.getUsers(1, 10, { search: "oauth-test@example.com" });
+    console.log("DEBUG: Looking for existing test user...");
+    
+    // First try to find an existing test user using the same pattern as register
+    const testUsers = await services.authService.getUsers(1, 10, { email: "oauth-test@example.com" });
+
+    console.log("DEBUG: getUsers result:", testUsers);
 
     if (testUsers.users && testUsers.users.length > 0) {
       // Fix potential undefined usage
       return testUsers.users[0]!.id;
     }
+
+    console.log("DEBUG: Creating new test user...");
 
     // Create a test user for OAuth flows
     const registerResult = await services.authService.register({
@@ -657,6 +663,8 @@ async function getOrCreateTestUser() {
       first_name: "OAuth",
       last_name: "Test User"
     });
+
+    console.log("DEBUG: registerResult:", registerResult);
 
     if (registerResult.success && registerResult.user) {
       return registerResult.user.id;

@@ -56,7 +56,7 @@ describe("OAuth API", () => {
     });
 
     afterEach(() => {
-        if (server) server.stop();
+        if (server) server?.stop();
     });
 
     test("should handle client credentials flow", async () => {

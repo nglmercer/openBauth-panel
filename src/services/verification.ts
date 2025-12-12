@@ -37,21 +37,35 @@ export class VerificationService {
     }
 
     async verifyToken(token: string, type: TokenType): Promise<{ valid: boolean; userId?: string }> {
-        // Use findAll instead of findFirst to avoid potential issue with multiple where clauses
+        defaultLogger.info(`Verifying token: ${token}, type: ${type}`);
+        
+        // Use a more direct approach - try to find the token first
         const result = await this.controller.findAll();
 
         if (!result.success || !result.data) {
+            defaultLogger.warn(`Failed to find tokens or no data available`);
             return { valid: false };
         }
 
-        const record = (result.data as any[]).find(r => r.token === token && r.type === type);
+        // Look for the specific token
+        const record = (result.data as any[]).find(r => r.token === token);
 
         if (!record) {
+            defaultLogger.warn(`Token not found: ${token}`);
             return { valid: false };
         }
+
+        // Check if the type matches
+        if (record.type !== type) {
+            defaultLogger.warn(`Token type mismatch. Expected: ${type}, Found: ${record.type}`);
+            return { valid: false };
+        }
+
+        defaultLogger.info(`Token found: ${JSON.stringify(record)}`);
 
         if (new Date() > new Date(record.expires_at)) {
             // Token expired
+            defaultLogger.warn(`Token expired. Expires at: ${record.expires_at}, Current time: ${new Date().toISOString()}`);
             await this.controller.delete(record.id); // Cleanup
             return { valid: false };
         }
@@ -59,6 +73,7 @@ export class VerificationService {
         // Token is valid
         // Optionally consume (delete) it
         await this.controller.delete(record.id);
+        defaultLogger.info(`Token verified successfully for user: ${record.user_id}`);
 
         return { valid: true, userId: record.user_id };
     }

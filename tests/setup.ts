@@ -1,6 +1,7 @@
 import { DatabaseInitializer } from "open-bauth";
 import { JWTServiceBun } from "open-bauth";
-
+import { Database } from "bun:sqlite";
+import type { TableSchema } from "open-bauth";
 // Set test environment
 process.env['NODE_ENV'] = "test";
 process.env['JWT_SECRET'] = "test-jwt-secret-key-for-testing-only";
@@ -13,6 +14,111 @@ process.env['SMTP_HOST'] = "";
 process.env['SMTP_USER'] = "";
 process.env['SMTP_PASS'] = "";
 
+export async function createDb(options?: {externalSchemas?: TableSchema[], defaults?: boolean}) {
+  const dbInit = new DatabaseInitializer({
+    database: new Database(":memory:"),
+    enableWAL: true,
+    enableForeignKeys: true,
+    externalSchemas: options?.externalSchemas || []
+  });
+  
+  if (options?.defaults) {
+    await dbInit.initialize();
+    await dbInit.seedDefaults();
+  }
+  
+  return { dbInit };
+}
+
+// Singleton para compartir la misma instancia de base de datos entre tests
+let sharedDbInstance: { dbInit: DatabaseInitializer } | null = null;
+
+export async function getSharedDb(options?: { externalSchemas?: TableSchema[], defaults?: boolean }) {
+  if (!sharedDbInstance) {
+    sharedDbInstance = await createDb(options);
+  }
+  return sharedDbInstance;
+}
+
+export function resetSharedDb() {
+  sharedDbInstance = null;
+}
+/*
+  async seedDefaults() {
+    const roleController = this.createController<Role>("roles");
+    const permissionController =
+      this.createController<Permission>("permissions");
+    const rolePermissionController =
+      this.createController<RolePermission>("role_permissions");
+
+    // Seed default roles
+    const roles = [
+      { name: "admin", description: "Administrator role" },
+      { name: "moderator", description: "Moderator role" },
+      { name: "user", description: "Standard user role" },
+    ];
+
+    for (const role of roles) {
+      const existing = await roleController.findFirst({ name: role.name });
+      if (!existing.data) {
+        await roleController.create(role);
+      }
+    }
+
+    // Seed default permissions
+    const permissions = [
+      {
+        name: "manage:users",
+        resource: "users",
+        action: "manage",
+        description: "Manage users",
+      },
+      {
+        name: "edit:content",
+        resource: "content",
+        action: "edit",
+        description: "Edit content",
+      },
+    ];
+
+    for (const perm of permissions) {
+      const existing = await permissionController.findFirst({
+        name: perm.name,
+      });
+      if (!existing.data) {
+        await permissionController.create(perm);
+      }
+    }
+
+    // Assign permissions to roles
+    const adminRole = await roleController.findFirst({ name: "admin" });
+    const moderatorRole = await roleController.findFirst({ name: "moderator" });
+
+    if (adminRole.data) {
+      const manageUsers = await permissionController.findFirst({
+        name: "manage:users",
+      });
+      if (manageUsers.data) {
+        await rolePermissionController.create({
+          role_id: adminRole.data.id,
+          permission_id: manageUsers.data.id,
+        });
+      }
+    }
+
+    if (moderatorRole.data) {
+      const editContent = await permissionController.findFirst({
+        name: "edit:content",
+      });
+      if (editContent.data) {
+        await rolePermissionController.create({
+          role_id: moderatorRole.data.id,
+          permission_id: editContent.data.id,
+        });
+      }
+    }
+  }
+*/
 // Test utilities
 const testUtils = {
   // Generate test user data
@@ -25,6 +131,11 @@ const testUtils = {
       username: `testuser${timestamp}_${random}`,
       first_name: "Test",
       last_name: "User",
+      bio: "Test bio",
+      timezone: "UTC",
+      language: "en",
+      avatar_url: "https://example.com/avatar.jpg",
+      phone_number: "+1234567890",
       ...overrides
     };
   },

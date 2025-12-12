@@ -16,7 +16,7 @@ describe("Admin API - Comprehensive Tests", () => {
     });
 
     afterEach(() => {
-        if (server) server.stop();
+        if (server) server?.stop();
     });
 
     async function createAdminUser() {

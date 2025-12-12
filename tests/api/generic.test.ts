@@ -25,7 +25,7 @@ describe("Generic Data API", () => {
     });
 
     afterEach(() => {
-        if (server) server.stop();
+        if (server) server?.stop();
         db.run("DROP TABLE IF EXISTS test_items");
     });
 

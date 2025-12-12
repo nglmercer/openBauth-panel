@@ -41,7 +41,7 @@ describe("Generic Data API - Comprehensive Tests", () => {
     });
 
     afterEach(() => {
-        if (server) server.stop();
+        if (server) server?.stop();
         db.run("DROP TABLE IF EXISTS test_products");
     });
 

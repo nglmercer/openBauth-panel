@@ -18,7 +18,7 @@ describe("Upload API", () => {
     });
 
     afterEach(() => {
-        if (server) server.stop();
+        if (server) server?.stop();
     });
 
     test("should upload a file", async () => {

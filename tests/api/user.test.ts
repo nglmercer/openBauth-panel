@@ -16,7 +16,7 @@ describe("User API", () => {
     });
 
     afterEach(() => {
-        if (server) server.stop();
+        if (server) server?.stop();
     });
 
     test("should retrieve user profile", async () => {

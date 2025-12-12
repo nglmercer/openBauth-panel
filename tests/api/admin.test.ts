@@ -65,7 +65,7 @@ describe("Admin API", () => {
     }, TEST_TIMEOUTS.LONG);
 
     afterEach(async () => {
-        server.stop();
+        server?.stop();
     });
 
     describe("GET /admin/users", () => {
