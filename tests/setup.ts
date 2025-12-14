@@ -1,7 +1,19 @@
 import { DatabaseInitializer } from "open-bauth";
 import { JWTServiceBun } from "open-bauth";
+import {
+  getOAuthSchemas,
+} from "open-bauth";
 import { Database } from "bun:sqlite";
 import type { TableSchema } from "open-bauth";
+import {
+    extendedUserSchema,
+    extendedRolesSchema,
+    extendedUserRolesSchema,
+    userRoles,
+    newUserSchema,
+    Roles
+} from "../src/schemas/newSchemas";
+import { verificationTokenSchema } from "../src/database/schema/verification-token";
 // Set test environment
 process.env['NODE_ENV'] = "test";
 process.env['JWT_SECRET'] = "test-jwt-secret-key-for-testing-only";
@@ -21,9 +33,13 @@ export async function createDb(options?: {externalSchemas?: TableSchema[], defau
     enableForeignKeys: true,
     externalSchemas: options?.externalSchemas || []
   });
+  const oauthSchemas = getOAuthSchemas()
+  dbInit.registerSchemas([...oauthSchemas, verificationTokenSchema, extendedUserSchema, extendedRolesSchema, extendedUserRolesSchema]);
+
+  // Always initialize the database schema (create tables)
+  await dbInit.initialize();
   
   if (options?.defaults) {
-    await dbInit.initialize();
     await dbInit.seedDefaults();
   }
   
@@ -125,6 +141,7 @@ const testUtils = {
   generateTestUser(overrides: any = {}) {
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 100000);
+    const now = new Date().toISOString();
     return {
       email: `test${timestamp}_${random}@example.com`,
       password: "TestPassword123!",
@@ -136,6 +153,10 @@ const testUtils = {
       language: "en",
       avatar_url: "https://example.com/avatar.jpg",
       phone_number: "+1234567890",
+      created_at: now,
+      updated_at: now,
+      is_active: true,
+      is_superuser: false,
       ...overrides
     };
   },

@@ -1,4 +1,5 @@
 import { AuthService, DatabaseInitializer, JWTServiceBun, type User } from 'open-bauth';
+import {type UserType,type UpdateUserType,type userRolesType,type RolesType } from '@/db';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 
@@ -62,7 +63,7 @@ export class ExtendedAuthService {
       }
 
       // Verificar si el usuario ya existe
-      const existingUser = await this.dbInitializer.createController('users').findFirst({
+      const existingUser = await this.dbInitializer.createControllerByKey<User>('users').findFirst({
         email: userData.email
       });
 
@@ -81,8 +82,12 @@ export class ExtendedAuthService {
       const passwordHash = await bcrypt.hash(userData.password, saltRounds);
 
       // Crear el usuario con todos los campos extendidos
-      const userController = this.dbInitializer.createController('users');
-      const result = await userController.create({
+      const userController = this.dbInitializer.createControllerByKey<UserType>('users');
+      const now = new Date().toISOString();
+      
+      // Construir el objeto completo con todos los campos requeridos
+      // Nota: is_superuser se omite temporalmente ya que la columna no existe en la BD
+      const newUserData = {
         id: randomUUID(),
         email: userData.email,
         password_hash: passwordHash,
@@ -94,10 +99,16 @@ export class ExtendedAuthService {
         language: userData.language || 'en',
         avatar_url: userData.avatar_url || '',
         phone_number: userData.phone_number || '',
-        is_active: true
-      });
+        is_active: true,
+        created_at: now,
+        updated_at: now
+      };
+      
+      //console.log('Creating user with data:', JSON.stringify(newUserData, null, 2));
+      const result = await userController.create(newUserData);
 
       if (!result.data) {
+        console.error('User creation failed:', result);
         return {
           success: false,
           error: {
@@ -107,18 +118,17 @@ export class ExtendedAuthService {
         };
       }
 
-      const userRecord = result.data as any;
-
-      // Generar token JWT con la estructura correcta
-      const userForToken: User = {
-        id: userRecord['id'],
-        email: userRecord['email'],
-        username: userRecord['username'],
-        is_active: userRecord['is_active'],
-        created_at: userRecord['created_at'],
-        updated_at: userRecord['updated_at']
+      const userRecord = result.data;
+      if (!userRecord){
+        return {
+        success: false,
+        error: {
+          type: 'DATABASE_ERROR',
+          message: 'Registration failed'
+        }
       };
-      const token = await this.jwtService.generateToken(userForToken);
+      }
+      const token = await this.jwtService.generateToken(userRecord);
 
       // Eliminar el password_hash del objeto de usuario
       const { password_hash, ...userWithoutPassword } = userRecord;
@@ -150,7 +160,7 @@ export class ExtendedAuthService {
   async login(credentials: { email: string; password: string }): Promise<ExtendedAuthResult> {
     try {
       // Buscar usuario por email
-      const userController = this.dbInitializer.createController('users');
+      const userController = this.dbInitializer.createControllerByKey<User>('users');
       const result = await userController.findFirst({
         email: credentials.email
       });
@@ -165,10 +175,10 @@ export class ExtendedAuthService {
         };
       }
 
-      const userRecord = result.data as any;
+      const userRecord = result.data;
 
       // Verificar contraseña
-      const isPasswordValid = await bcrypt.compare(credentials.password, userRecord['password_hash']);
+      const isPasswordValid = await bcrypt.compare(credentials.password, userRecord['password_hash']!);
 
       if (!isPasswordValid) {
         return {
@@ -179,24 +189,14 @@ export class ExtendedAuthService {
           }
         };
       }
-
-      // Generar token JWT con la estructura correcta
-      const userForToken: User = {
-        id: userRecord['id'],
-        email: userRecord['email'],
-        username: userRecord['username'],
-        is_active: userRecord['is_active'],
-        created_at: userRecord['created_at'],
-        updated_at: userRecord['updated_at']
-      };
-      const token = await this.jwtService.generateToken(userForToken);
+      const token = await this.jwtService.generateToken(userRecord);
 
       // Eliminar el password_hash del objeto de usuario
       const { password_hash, ...userWithoutPassword } = userRecord;
 
       return {
         success: true,
-        user: userWithoutPassword as any,
+        user: userWithoutPassword,
         token
       };
 
@@ -213,35 +213,19 @@ export class ExtendedAuthService {
   }
 
   // Add findUserById method for compatibility with auth middleware
-  async findUserById(userId: string): Promise<(User & { roles: any[]; first_name: string; last_name: string; bio: string; timezone: string; language: string; avatar_url: string; phone_number: string; }) | null> {
+  async findUserById(userId: string|number): Promise<User | null> {
     try {
-      const userController = this.dbInitializer.createController('users');
+      const userController = this.dbInitializer.createControllerByKey<User>('users');
       const result = await userController.findById(userId);
       
       if (!result.success || !result.data) {
         return null;
       }
 
-      const userRecord = result.data as any;
+      const userRecord = result.data;
       
       // Return user in format expected by middleware
-      return {
-        id: userRecord['id'],
-        email: userRecord['email'],
-        username: userRecord['username'],
-        is_active: userRecord['is_active'],
-        created_at: userRecord['created_at'],
-        updated_at: userRecord['updated_at'],
-        // Include additional fields that might be needed
-        roles: userRecord['roles'] || [],
-        first_name: userRecord['first_name'],
-        last_name: userRecord['last_name'],
-        bio: userRecord['bio'],
-        timezone: userRecord['timezone'],
-        language: userRecord['language'],
-        avatar_url: userRecord['avatar_url'],
-        phone_number: userRecord['phone_number']
-      };
+      return userRecord;
     } catch (error) {
       console.error('findUserById error:', error);
       return null;
@@ -249,34 +233,19 @@ export class ExtendedAuthService {
   }
 
   // Add findUserByEmail method for compatibility
-  async findUserByEmail(email: string): Promise<(User & { roles: any[]; first_name: string; last_name: string; bio: string; timezone: string; language: string; avatar_url: string; phone_number: string; }) | null> {
+  async findUserByEmail(email: string): Promise<UserType| null> {
     try {
-      const userController = this.dbInitializer.createController('users');
+      const userController = this.dbInitializer.createControllerByKey<UserType>('users');
       const result = await userController.findFirst({ email });
       
       if (!result.success || !result.data) {
         return null;
       }
 
-      const userRecord = result.data as any;
+      const userRecord = result.data;
       
       // Return user in format expected by middleware
-      return {
-        id: userRecord['id'],
-        email: userRecord['email'],
-        username: userRecord['username'],
-        is_active: userRecord['is_active'],
-        created_at: userRecord['created_at'],
-        updated_at: userRecord['updated_at'],
-        roles: userRecord['roles'] || [],
-        first_name: userRecord['first_name'],
-        last_name: userRecord['last_name'],
-        bio: userRecord['bio'],
-        timezone: userRecord['timezone'],
-        language: userRecord['language'],
-        avatar_url: userRecord['avatar_url'],
-        phone_number: userRecord['phone_number']
-      };
+      return userRecord;
     } catch (error) {
       console.error('findUserByEmail error:', error);
       return null;
@@ -284,26 +253,10 @@ export class ExtendedAuthService {
   }
 
   // Add getUserRoles method for compatibility
-  async getUserRoles(userId: string): Promise<any[]> {
+  async getUserRoles(userId: string) {
     try {
-      const userRolesController = this.dbInitializer.createController('user_roles');
-      const rolesController = this.dbInitializer.createController('roles');
-      
-      const userRolesResult = await userRolesController.findAll({
-        where: { user_id: userId }
-      });
-      
-      const roles = [];
-      if (userRolesResult.data) {
-        for (const userRole of userRolesResult.data as any[]) {
-          const roleResult = await rolesController.findById(userRole.role_id);
-          if (roleResult.success && roleResult.data) {
-            roles.push(roleResult.data);
-          }
-        }
-      }
-      
-      return roles;
+      const userRoles = await this.authService.getUserRoles(userId);
+      return userRoles;
     } catch (error) {
       console.error('getUserRoles error:', error);
       return [];
@@ -311,14 +264,14 @@ export class ExtendedAuthService {
   }
 
   // Add updateUser method for compatibility
-  async updateUser(userId: string, updates: Partial<any>): Promise<{ success: boolean; error?: string }> {
+  async updateUser(userId: string, updates: UpdateUserType): Promise<{ success: boolean; error?: string | undefined }> {
     try {
-      const userController = this.dbInitializer.createController('users');
+      const userController = this.dbInitializer.createControllerByKey<UserType>('users');
       const result = await userController.update(userId, updates);
       
       return {
         success: result.success,
-        error: result.error || undefined
+        error: result.error
       };
     } catch (error) {
       console.error('updateUser error:', error);
@@ -332,7 +285,7 @@ export class ExtendedAuthService {
   // Add getUsers method for OAuth compatibility
   async getUsers(page?: number, limit?: number, filters?: any): Promise<{ users: any[]; total: number }> {
     try {
-      const userController = this.dbInitializer.createController('users');
+      const userController = this.dbInitializer.createControllerByKey<UserType>('users');
       
       // Build query options
       const options: any = {};

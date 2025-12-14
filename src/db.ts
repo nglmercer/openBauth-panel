@@ -1,13 +1,23 @@
 import { Database } from "bun:sqlite";
-import { DatabaseInitializer } from "open-bauth";
+import { DatabaseInitializer, Schema } from "open-bauth";
 import {
   JWTServiceBun,
+  //@ts-ignore
   AuthService,
   PermissionService,
   getOAuthSchemas,
 } from "open-bauth";
 import { ExtendedAuthService } from "./services/extended-auth";
-
+import { verificationTokenSchema } from "./database/schema/verification-token";
+import {
+    extendedUserSchema,
+    extendedRolesSchema,
+    extendedUserRolesSchema,
+    userRoles,
+    newUserSchema,
+    Roles
+} from "./schemas/newSchemas";
+import { z } from "zod";
 const db = new Database(process.env['DATABASE_URL'] || ":memory:");
 const dbInitializer = new DatabaseInitializer({ database: db });
 const jwtService = new JWTServiceBun(process.env["JWT_SECRET"] || "dev-secret", "7d");
@@ -15,30 +25,22 @@ const authService = new ExtendedAuthService(dbInitializer, jwtService);
 const permissionService = new PermissionService(dbInitializer);
 const oauthSchemas = getOAuthSchemas();
 
-// Register OAuth schemas and verification tokens
-import { verificationTokenSchema } from "./database/schema/verification-token";
-import type { TableSchema } from "open-bauth";
 
-const extendedUserSchema: TableSchema = {
-  tableName: "users",
-  columns: [
-    { name: "id", type: "TEXT", primaryKey: true },
-    { name: "email", type: "TEXT", unique: true },
-    { name: "password_hash", type: "TEXT" },
-    { name: "first_name", type: "TEXT", notNull: true },
-    { name: "last_name", type: "TEXT", notNull: true },
-    { name: "is_active", type: "BOOLEAN", defaultValue: true },
-    { name: "is_superuser", type: "BOOLEAN", defaultValue: false },
-    { name: "created_at", type: "DATETIME", defaultValue: "CURRENT_TIMESTAMP" },
-    { name: "updated_at", type: "DATETIME", defaultValue: "CURRENT_TIMESTAMP" },
-    { name: "bio", type: "TEXT", notNull: true },
-    { name: "timezone", type: "TEXT", notNull: true },
-    { name: "language", type: "TEXT", notNull: true },
-    { name: "avatar_url", type: "TEXT", notNull: true },
-    { name: "phone_number", type: "TEXT", notNull: true }
-  ]
-};
 
-dbInitializer.registerSchemas([...oauthSchemas, verificationTokenSchema, extendedUserSchema]);
+dbInitializer.registerSchemas([...oauthSchemas, verificationTokenSchema, extendedUserSchema, extendedRolesSchema, extendedUserRolesSchema]);
 
-export { db, dbInitializer, jwtService, authService, permissionService, extendedUserSchema };
+// Export typed Zod schemas for type-safe operations
+export const ZodSchemaUser = newUserSchema.toZodTyped();
+export const ZodSchemaUserRoles = userRoles.toZodTyped();
+export const ZodSchemaRoles = Roles.toZodTyped();
+
+export type UserType = z.infer<typeof ZodSchemaUser.read>;
+export type CreateUserType = z.infer<typeof ZodSchemaUser.create>;
+export type UpdateUserType = z.infer<typeof ZodSchemaUser.update>;
+export type userRolesType  = z.infer<typeof ZodSchemaUserRoles.read>;
+export type CreateuserRolesType = z.infer<typeof ZodSchemaUserRoles.create>;
+export type UpdateuserRolesType = z.infer<typeof ZodSchemaUserRoles.update>;
+export type RolesType  = z.infer<typeof ZodSchemaRoles.read>;
+export type CreateRolesType = z.infer<typeof ZodSchemaRoles.create>;
+export type UpdateRolesType = z.infer<typeof ZodSchemaRoles.update>;
+export { db, dbInitializer, jwtService, authService, permissionService, extendedUserSchema, newUserSchema };
