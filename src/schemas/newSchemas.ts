@@ -15,20 +15,20 @@ const StandardFields = {
 
 const newUserSchema = new Schema({
   id: { type: String, primaryKey: true },
-  email: { type: String, unique: true,notNull:true },
-  password_hash: {type:String,notNull:true},
+  email: { type: String, unique: true, notNull: true },
+  password_hash: { type: String, notNull: true },
   first_name: { type: String, notNull: true },
   last_name: { type: String, notNull: true },
   username: { type: String, notNull: true },
-  is_active: { type: Boolean, defaultValue: true,notNull: true },
+  is_active: { type: Boolean, defaultValue: true, notNull: true },
   is_superuser: { type: Boolean, defaultValue: false },
-  created_at: { type: String, defaultValue: "CURRENT_TIMESTAMP",notNull: true },
-  updated_at: { type: String, defaultValue: "CURRENT_TIMESTAMP",notNull: true },
-  bio: { type: String, notNull: true },
-  timezone: { type: String, notNull: true },
-  language: { type: String, notNull: true },
-  avatar_url: { type: String, notNull: true },
-  phone_number: { type: String, notNull: true }
+  created_at: { type: String, defaultValue: "CURRENT_TIMESTAMP", notNull: true },
+  updated_at: { type: String, defaultValue: "CURRENT_TIMESTAMP", notNull: true },
+  bio: { type: String, notNull: false, defaultValue: null },
+  timezone: { type: String, notNull: false, defaultValue: null },
+  language: { type: String, notNull: false, defaultValue: null },
+  avatar_url: { type: String, notNull: false, defaultValue: null },
+  phone_number: { type: String, notNull: false, defaultValue: null }
 }, {
   indexes: [
     { name: "idx_users_email", columns: ["email"], unique: true },

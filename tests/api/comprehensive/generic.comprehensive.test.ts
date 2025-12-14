@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { initializeApp, app } from "../../src/index";
-import { testUtils, TEST_TIMEOUTS } from "../setup";
-import { db } from "../../src/db";
+import { initializeApp, app } from "../../../src/index";
+import { testUtils, TEST_TIMEOUTS } from "../../setup";
+import { db } from "../../../src/db";
 
 describe("Generic Data API - Comprehensive Tests", () => {
     let baseUrl: string;

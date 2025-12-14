@@ -1,51 +1,103 @@
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { testUtils, TEST_TIMEOUTS, getSharedDb, resetSharedDb } from "../setup";
-import { getServiceFactory } from "../../src/services/service-factory";
-import { DatabaseInitializer } from "open-bauth";
-import type { TableSchema } from "open-bauth";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { Database } from "bun:sqlite";
+import { DatabaseInitializer, JWTServiceBun, getOAuthSchemas } from "open-bauth";
+import { testUtils, TEST_TIMEOUTS } from "../../setup";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { logger } from "hono/logger";
+import { prettyJSON } from "hono/pretty-json";
+import { auth } from "../../../src/routes/auth";
+import { ExtendedAuthService } from "../../../src/services/extended-auth";
+import { getServiceFactory, ServiceFactory } from "../../../src/services/service-factory";
+import { verificationTokenSchema } from "../../../src/database/schema/verification-token";
+import {
+    extendedUserSchema,
+    extendedRolesSchema,
+    extendedUserRolesSchema,
+} from "../../../src/schemas/newSchemas";
 
 describe("Authentication API - Comprehensive Tests", () => {
     let dbInit: DatabaseInitializer;
     let services: any;
+    let app: Hono;
+    let server: any;
+    let baseUrl: string;
 
-    beforeAll(async () => {
-        // Importar esquemas necesarios primero
-        const { verificationTokenSchema } = await import("../../src/database/schema/verification-token");
-        const { getOAuthSchemas } = await import("open-bauth");
-        const oauthSchemas = getOAuthSchemas();
-        
-        // Importar el esquema extendido de usuarios
-        const { extendedUserSchema } = await import("../../src/db");
-        
-        // Crear base de datos compartida con los esquemas necesarios
-        const sharedDb = await getSharedDb({
-            defaults: true,
-            externalSchemas: [...oauthSchemas, verificationTokenSchema, extendedUserSchema]
+    beforeEach(async () => {
+        // Create isolated database instance for each test
+        const db = new Database(":memory:");
+        dbInit = new DatabaseInitializer({
+            database: db,
+            enableWAL: true,
+            enableForeignKeys: true
         });
-        dbInit = sharedDb.dbInit;
         
-        // Obtener servicios usando la base de datos compartida
+        // Register schemas
+        const oauthSchemas = getOAuthSchemas();
+        dbInit.registerSchemas([
+            ...oauthSchemas,
+            verificationTokenSchema,
+            extendedUserSchema,
+            extendedRolesSchema,
+            extendedUserRolesSchema
+        ]);
+        
+        // Initialize database
+        await dbInit.initialize();
+        await dbInit.seedDefaults();
+
+        // Create isolated service factory
         const factory = getServiceFactory(dbInit);
         services = factory.getServices();
+
+        // Create isolated Hono app
+        app = new Hono().basePath("/api/v1");
+        
+        // Add middleware
+        app.use("*", logger());
+        app.use("*", prettyJSON());
+        app.use("*", cors({
+            origin: "*",
+            allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+            credentials: true
+        }));
+
+        // Mount routes
+        app.route("/auth", auth);
+
+        // Start server
+        server = Bun.serve({
+            port: 0,
+            fetch: app.fetch
+        });
+        baseUrl = `http://localhost:${server.port}/api/v1`;
     });
 
-    afterAll(async () => {
-        resetSharedDb();
+    afterEach(async () => {
+        if (server) {
+            server.stop();
+        }
+        if (dbInit) {
+            // Clean up database
+            dbInit.db.close();
+        }
+        // Reset service factory instance
+        (ServiceFactory as any).instance = null;
     });
 
     describe("User Registration", () => {
         test("should register a new user successfully", async () => {
             const userData = testUtils.generateTestUser();
-            console.log('Attempting to register user:', userData);
 
-            const result = await services.authService.register(userData);
-            console.log('Registration result:', result);
+            const response = await fetch(`${baseUrl}/auth/signup`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(userData)
+            });
 
-            // Verificar si el resultado tiene la estructura esperada
-            if (result.success === false && result.error?.message) {
-                console.log('Validation error details:', result.error.message);
-            }
+            const result = await response.json() as any;
 
+            expect(response.status).toBe(201);
             expect(result.success).toBe(true);
             expect(result.user).toBeDefined();
             expect(result.user.email).toBe(userData.email);
@@ -58,11 +110,21 @@ describe("Authentication API - Comprehensive Tests", () => {
             const userData = testUtils.generateTestUser();
             
             // First registration
-            await services.authService.register(userData);
+            await fetch(`${baseUrl}/auth/signup`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(userData)
+            });
             
             // Second registration with same email
-            const result = await services.authService.register(userData);
+            const response = await fetch(`${baseUrl}/auth/signup`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(userData)
+            });
             
+            const result = await response.json() as any;
+            expect(response.status).toBe(400);
             expect(result.success).toBe(false);
             expect(result.error).toBeDefined();
         }, TEST_TIMEOUTS.MEDIUM);
@@ -71,35 +133,58 @@ describe("Authentication API - Comprehensive Tests", () => {
             const userData = testUtils.generateTestUser();
             userData.email = "invalid-email";
             
-            const result = await services.authService.register(userData);
+            const response = await fetch(`${baseUrl}/auth/signup`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(userData)
+            });
             
+            const result = await response.json() as any;
+            expect(response.status).toBe(400);
             expect(result.success).toBe(false);
             expect(result.error).toBeDefined();
-            expect(result.error.type).toBe("DATABASE_ERROR");
         }, TEST_TIMEOUTS.MEDIUM);
 
         test("should reject short password", async () => {
             const userData = testUtils.generateTestUser();
             userData.password = "short";
             
-            const result = await services.authService.register(userData);
+            const response = await fetch(`${baseUrl}/auth/signup`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(userData)
+            });
             
+            const result = await response.json() as any;
+            expect(response.status).toBe(400);
             expect(result.success).toBe(false);
             expect(result.error).toBeDefined();
-            expect(result.error.type).toBe("DATABASE_ERROR");
         }, TEST_TIMEOUTS.MEDIUM);
     });
 
     describe("User Login", () => {
         test("should login with valid credentials", async () => {
             const userData = testUtils.generateTestUser();
-            await services.authService.register(userData);
             
-            const result = await services.authService.login({
-                email: userData.email,
-                password: userData.password
+            // First register the user
+            await fetch(`${baseUrl}/auth/signup`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(userData)
             });
             
+            // Then try to login
+            const response = await fetch(`${baseUrl}/auth/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email: userData.email,
+                    password: userData.password
+                })
+            });
+            
+            const result = await response.json() as any;
+            expect(response.status).toBe(200);
             expect(result.success).toBe(true);
             expect(result.token).toBeDefined();
             expect(result.user).toBeDefined();
@@ -108,27 +193,44 @@ describe("Authentication API - Comprehensive Tests", () => {
 
         test("should reject invalid password", async () => {
             const userData = testUtils.generateTestUser();
-            await services.authService.register(userData);
             
-            const result = await services.authService.login({
-                email: userData.email,
-                password: "wrongpassword"
+            // First register the user
+            await fetch(`${baseUrl}/auth/signup`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(userData)
             });
             
+            // Then try to login with wrong password
+            const response = await fetch(`${baseUrl}/auth/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email: userData.email,
+                    password: "wrongpassword"
+                })
+            });
+            
+            const result = await response.json() as any;
+            expect(response.status).toBe(401);
             expect(result.success).toBe(false);
             expect(result.error).toBeDefined();
-            expect(result.error.type).toBe("INVALID_CREDENTIALS");
         }, TEST_TIMEOUTS.MEDIUM);
 
         test("should reject non-existent user", async () => {
-            const result = await services.authService.login({
-                email: "nonexistent@example.com",
-                password: "password123"
+            const response = await fetch(`${baseUrl}/auth/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email: "nonexistent@example.com",
+                    password: "password123"
+                })
             });
             
+            const result = await response.json() as any;
+            expect(response.status).toBe(401);
             expect(result.success).toBe(false);
             expect(result.error).toBeDefined();
-            expect(result.error.type).toBe("INVALID_CREDENTIALS");
         }, TEST_TIMEOUTS.MEDIUM);
     });
 

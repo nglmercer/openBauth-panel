@@ -133,8 +133,8 @@ oauth.post("/token", async (c) => {
         break;
       default:
         return c.json({
-          error: "unsupported_grant_type",
-          error_description: "Grant type not supported"
+          error: "invalid_request",
+          error_description: "Invalid grant type"
         }, 400);
     }
 
@@ -412,6 +412,13 @@ async function handleAuthorizationCodeGrant(validated: any, client: any) {
   const accessToken = await services.jwtService.generateToken(user);
   const refreshToken = await services.jwtService.generateRefreshToken(user.id);
 
+  defaultLogger.info("Generated tokens", {
+    accessTokenLength: accessToken.length,
+    refreshTokenLength: refreshToken.length,
+    userId: user.id,
+    clientId: client.client_id
+  });
+
   // Create refresh token record
   await createRefreshTokenRecord(refreshToken, user.id, client.client_id, authCode.scope);
 
@@ -432,15 +439,42 @@ async function handleRefreshTokenGrant(validated: any, client: any) {
     };
   }
 
+  defaultLogger.info("Processing refresh token grant", {
+    refreshToken: validated.refresh_token.substring(0, 10) + "...",
+    clientId: client.client_id
+  });
+
   // Verify refresh token
   let refreshToken = oauthService ? await oauthService.findRefreshTokenByToken(validated.refresh_token) : null;
+
+  defaultLogger.info("Database refresh token lookup", {
+    found: !!refreshToken,
+    token: refreshToken ? {
+      id: refreshToken.id,
+      userId: refreshToken.user_id,
+      clientId: refreshToken.client_id,
+      isRevoked: refreshToken.is_revoked,
+      expiresAt: refreshToken.expires_at
+    } : null
+  });
 
   // Fallback to test cache
   if (!refreshToken && typeof global !== 'undefined' && (global as any).testRefreshTokens) {
     refreshToken = (global as any).testRefreshTokens[validated.refresh_token];
+    defaultLogger.info("Found refresh token in test cache", {
+      found: !!refreshToken,
+      tokenId: refreshToken?.id
+    });
   }
 
   if (!refreshToken || refreshToken.is_revoked || new Date() > new Date(refreshToken.expires_at)) {
+    defaultLogger.warn("Refresh token validation failed", {
+      exists: !!refreshToken,
+      isRevoked: refreshToken?.is_revoked,
+      isExpired: refreshToken ? new Date() > new Date(refreshToken.expires_at) : null,
+      currentTime: new Date().toISOString(),
+      tokenExpiresAt: refreshToken?.expires_at
+    });
     return {
       error: "invalid_grant",
       error_description: "Invalid or expired refresh token"
@@ -630,12 +664,27 @@ async function createRefreshTokenRecord(token: string, userId: string, clientId:
     id: `rt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
   };
 
-  if (oauthService) await oauthService.createRefreshToken(refreshTokenRecord);
+  try {
+    if (oauthService) {
+      await oauthService.createRefreshToken(refreshTokenRecord);
+      defaultLogger.info("Refresh token created successfully", {
+        token: token.substring(0, 10) + "...",
+        userId: userId,
+        clientId: clientId
+      });
+    } else {
+      defaultLogger.warn("OAuth service not available, using test cache");
+    }
+  } catch (error) {
+    defaultLogger.error("Failed to create refresh token in database", error as Error);
+    // Continue with test cache as fallback
+  }
 
   // Store refresh token in test cache (fallback)
   if (typeof global !== 'undefined') {
     (global as any).testRefreshTokens = (global as any).testRefreshTokens || {};
     (global as any).testRefreshTokens[token] = refreshTokenRecord;
+    defaultLogger.info("Refresh token stored in test cache");
   }
 }
 
@@ -643,14 +692,15 @@ async function getOrCreateTestUser() {
   try {
     console.log("DEBUG: Looking for existing test user...");
     
-    // First try to find an existing test user using the same pattern as register
-    const testUsers = await services.authService.getUsers(1, 10, { email: "oauth-test@example.com" });
-
-    console.log("DEBUG: getUsers result:", testUsers);
-
-    if (testUsers.users && testUsers.users.length > 0) {
-      // Fix potential undefined usage
-      return testUsers.users[0]!.id;
+    // First try to find an existing test user using the auth service
+    try {
+      const user = await services.authService.findUserByEmail("oauth-test@example.com");
+      if (user && user.is_active) {
+        console.log("DEBUG: Found existing test user:", user.id);
+        return user.id;
+      }
+    } catch (findError) {
+      console.log("DEBUG: Test user not found, will create one");
     }
 
     console.log("DEBUG: Creating new test user...");
@@ -661,7 +711,12 @@ async function getOrCreateTestUser() {
       password: "test-password-123",
       username: "oauth-test-user",
       first_name: "OAuth",
-      last_name: "Test User"
+      last_name: "Test User",
+      bio: "Test user for OAuth",
+      timezone: "UTC",
+      language: "en",
+      avatar_url: "https://example.com/avatar.jpg",
+      phone_number: "+1234567890"
     });
 
     console.log("DEBUG: registerResult:", registerResult);

@@ -1,13 +1,73 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { initializeApp, app } from "../../src/index";
-import { testUtils, TEST_TIMEOUTS } from "../setup";
+import { Database } from "bun:sqlite";
+import { DatabaseInitializer, JWTServiceBun, getOAuthSchemas } from "open-bauth";
+import { testUtils, TEST_TIMEOUTS } from "../../setup";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { logger } from "hono/logger";
+import { prettyJSON } from "hono/pretty-json";
+import { adminRoutes } from "../../../src/routes/admin";
+import { auth } from "../../../src/routes/auth";
+import { ExtendedAuthService } from "../../../src/services/extended-auth";
+import { getServiceFactory, ServiceFactory } from "../../../src/services/service-factory";
+import { verificationTokenSchema } from "../../../src/database/schema/verification-token";
+import {
+    extendedUserSchema,
+    extendedRolesSchema,
+    extendedUserRolesSchema,
+} from "../../../src/schemas/newSchemas";
 
 describe("Admin API - Comprehensive Tests", () => {
     let baseUrl: string;
     let server: any;
+    let services: any;
+    let app: Hono;
+    let dbInit: DatabaseInitializer;
 
     beforeEach(async () => {
-        await initializeApp();
+        // Create isolated database instance for each test
+        const db = new Database(":memory:");
+        dbInit = new DatabaseInitializer({
+            database: db,
+            enableWAL: true,
+            enableForeignKeys: true
+        });
+        
+        // Register schemas
+        const oauthSchemas = getOAuthSchemas();
+        dbInit.registerSchemas([
+            ...oauthSchemas,
+            verificationTokenSchema,
+            extendedUserSchema,
+            extendedRolesSchema,
+            extendedUserRolesSchema
+        ]);
+        
+        // Initialize database
+        await dbInit.initialize();
+        await dbInit.seedDefaults();
+
+        // Create isolated service factory
+        const factory = getServiceFactory(dbInit);
+        services = factory.getServices();
+
+        // Create isolated Hono app
+        app = new Hono().basePath("/api/v1");
+        
+        // Add middleware
+        app.use("*", logger());
+        app.use("*", prettyJSON());
+        app.use("*", cors({
+            origin: "*",
+            allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+            credentials: true
+        }));
+
+        // Mount routes
+        app.route("/auth", auth);
+        app.route("/admin", adminRoutes);
+
+        // Start server
         server = Bun.serve({
             port: 0,
             fetch: app.fetch
@@ -15,8 +75,16 @@ describe("Admin API - Comprehensive Tests", () => {
         baseUrl = `http://localhost:${server.port}/api/v1`;
     });
 
-    afterEach(() => {
-        if (server) server?.stop();
+    afterEach(async () => {
+        if (server) {
+            server.stop();
+        }
+        if (dbInit) {
+            // Clean up database
+            dbInit.db.close();
+        }
+        // Reset service factory instance
+        (ServiceFactory as any).instance = null;
     });
 
     async function createAdminUser() {
@@ -30,10 +98,8 @@ describe("Admin API - Comprehensive Tests", () => {
         const userId = signupResult.user.id;
         const token = signupResult.token;
 
-        // Assign admin role
-        const { getServiceFactory } = await import("../../src/services/service-factory");
-        const factory = getServiceFactory();
-        const services = factory.getServices();
+        // Use existing services (already isolated)
+        // services is already defined in the outer scope
 
         // Create admin role if it doesn't exist
         const roleController = services.dbInitializer.createController("roles");
