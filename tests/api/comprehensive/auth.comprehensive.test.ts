@@ -1,13 +1,12 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { DatabaseInitializer, JWTServiceBun, getOAuthSchemas } from "open-bauth";
+import { DatabaseInitializer, getOAuthSchemas } from "open-bauth";
 import { testUtils, TEST_TIMEOUTS } from "../../setup";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
 import { auth } from "../../../src/routes/auth";
-import { ExtendedAuthService } from "../../../src/services/extended-auth";
 import { getServiceFactory, ServiceFactory } from "../../../src/services/service-factory";
 import { verificationTokenSchema } from "../../../src/database/schema/verification-token";
 import {

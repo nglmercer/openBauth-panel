@@ -1,95 +1,38 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { Database } from "bun:sqlite";
-import { DatabaseInitializer, JWTServiceBun, getOAuthSchemas } from "open-bauth";
 import { testUtils, TEST_TIMEOUTS } from "../../setup";
-import { Hono } from "hono";
-import { cors } from "hono/cors";
-import { logger } from "hono/logger";
-import { prettyJSON } from "hono/pretty-json";
-import { adminRoutes } from "../../../src/routes/admin";
-import { auth } from "../../../src/routes/auth";
-import { ExtendedAuthService } from "../../../src/services/extended-auth";
-import { getServiceFactory, ServiceFactory } from "../../../src/services/service-factory";
-import { verificationTokenSchema } from "../../../src/database/schema/verification-token";
-import {
-    extendedUserSchema,
-    extendedRolesSchema,
-    extendedUserRolesSchema,
-} from "../../../src/schemas/newSchemas";
+import { initializeApp, app } from "../../../src/index";
+import { getServiceFactory } from "../../../src/services/service-factory";
 
 describe("Admin API - Comprehensive Tests", () => {
     let baseUrl: string;
     let server: any;
     let services: any;
-    let app: Hono;
-    let dbInit: DatabaseInitializer;
 
     beforeEach(async () => {
-        // Create isolated database instance for each test
-        const db = new Database(":memory:");
-        dbInit = new DatabaseInitializer({
-            database: db,
-            enableWAL: true,
-            enableForeignKeys: true
-        });
+        // Initialize app using the same pattern as working tests
+        await initializeApp();
         
-        // Register schemas
-        const oauthSchemas = getOAuthSchemas();
-        dbInit.registerSchemas([
-            ...oauthSchemas,
-            verificationTokenSchema,
-            extendedUserSchema,
-            extendedRolesSchema,
-            extendedUserRolesSchema
-        ]);
-        
-        // Initialize database
-        await dbInit.initialize();
-        await dbInit.seedDefaults();
-
-        // Create isolated service factory
-        const factory = getServiceFactory(dbInit);
-        services = factory.getServices();
-
-        // Create isolated Hono app
-        app = new Hono().basePath("/api/v1");
-        
-        // Add middleware
-        app.use("*", logger());
-        app.use("*", prettyJSON());
-        app.use("*", cors({
-            origin: "*",
-            allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-            credentials: true
-        }));
-
-        // Mount routes
-        app.route("/auth", auth);
-        app.route("/admin", adminRoutes);
-
         // Start server
         server = Bun.serve({
             port: 0,
             fetch: app.fetch
         });
         baseUrl = `http://localhost:${server.port}/api/v1`;
+        
+        // Get services
+        const factory = getServiceFactory();
+        services = factory.getServices();
     });
 
     afterEach(async () => {
         if (server) {
             server.stop();
         }
-        if (dbInit) {
-            // Clean up database
-            dbInit.db.close();
-        }
-        // Reset service factory instance
-        (ServiceFactory as any).instance = null;
     });
 
     async function createAdminUser() {
         const userData = testUtils.generateTestUser();
-        const signupResponse = await fetch(`${baseUrl}/auth/signup`, {
+        const signupResponse = await app.request("/api/v1/auth/signup", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(userData)
@@ -98,21 +41,16 @@ describe("Admin API - Comprehensive Tests", () => {
         const userId = signupResult.user.id;
         const token = signupResult.token;
 
-        // Use existing services (already isolated)
-        // services is already defined in the outer scope
-
         // Create admin role if it doesn't exist
         const roleController = services.dbInitializer.createController("roles");
-        let adminRole: any = await roleController.search({ name: "admin" });
-        if (!adminRole || !adminRole.data || adminRole.data.length === 0) {
+        let adminRole: any = await roleController.findFirst({ name: "admin" });
+        if (!adminRole?.data) {
             adminRole = await roleController.create({
                 id: crypto.randomUUID(),
                 name: "admin",
                 description: "Administrator role",
                 is_active: true
             });
-        } else {
-            adminRole = { data: adminRole.data[0] };
         }
 
         // Assign role to user
@@ -120,7 +58,7 @@ describe("Admin API - Comprehensive Tests", () => {
         await userRolesController.create({
             id: crypto.randomUUID(),
             user_id: userId,
-            role_id: adminRole.data.id
+            role_id: (adminRole.data as any)?.id || adminRole.id
         });
 
         return {
@@ -132,7 +70,7 @@ describe("Admin API - Comprehensive Tests", () => {
 
     async function createRegularUser() {
         const userData = testUtils.generateTestUser();
-        const signupResponse = await fetch(`${baseUrl}/auth/signup`, {
+        const signupResponse = await app.request("/api/v1/auth/signup", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(userData)
@@ -149,7 +87,7 @@ describe("Admin API - Comprehensive Tests", () => {
         test("should list all users for admin", async () => {
             const { token } = await createAdminUser();
 
-            const response = await fetch(`${baseUrl}/admin/users`, {
+            const response = await app.request("/api/v1/admin/users", {
                 headers: { "Authorization": `Bearer ${token}` }
             });
 
@@ -161,7 +99,7 @@ describe("Admin API - Comprehensive Tests", () => {
         }, TEST_TIMEOUTS.LONG);
 
         test("should reject request without authentication", async () => {
-            const response = await fetch(`${baseUrl}/admin/users`);
+            const response = await app.request("/api/v1/admin/users");
 
             expect(response.status).toBe(401);
         }, TEST_TIMEOUTS.MEDIUM);
@@ -169,7 +107,7 @@ describe("Admin API - Comprehensive Tests", () => {
         test("should reject request from non-admin user", async () => {
             const { token } = await createRegularUser();
 
-            const response = await fetch(`${baseUrl}/admin/users`, {
+            const response = await app.request("/api/v1/admin/users", {
                 headers: { "Authorization": `Bearer ${token}` }
             });
 
@@ -181,7 +119,7 @@ describe("Admin API - Comprehensive Tests", () => {
         test("should list all roles for admin", async () => {
             const { token } = await createAdminUser();
 
-            const response = await fetch(`${baseUrl}/admin/roles`, {
+            const response = await app.request("/api/v1/admin/roles", {
                 headers: { "Authorization": `Bearer ${token}` }
             });
 
@@ -196,7 +134,7 @@ describe("Admin API - Comprehensive Tests", () => {
         }, TEST_TIMEOUTS.LONG);
 
         test("should reject request without authentication", async () => {
-            const response = await fetch(`${baseUrl}/admin/roles`);
+            const response = await app.request("/api/v1/admin/roles");
 
             expect(response.status).toBe(401);
         }, TEST_TIMEOUTS.MEDIUM);
@@ -204,7 +142,7 @@ describe("Admin API - Comprehensive Tests", () => {
         test("should reject request from non-admin user", async () => {
             const { token } = await createRegularUser();
 
-            const response = await fetch(`${baseUrl}/admin/roles`, {
+            const response = await app.request("/api/v1/admin/roles", {
                 headers: { "Authorization": `Bearer ${token}` }
             });
 
@@ -221,7 +159,7 @@ describe("Admin API - Comprehensive Tests", () => {
                 description: "Test role description"
             };
 
-            const response = await fetch(`${baseUrl}/admin/roles`, {
+            const response = await app.request("/api/v1/admin/roles", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -246,7 +184,7 @@ describe("Admin API - Comprehensive Tests", () => {
                 description: "Test role description"
             };
 
-            const response = await fetch(`${baseUrl}/admin/roles`, {
+            const response = await app.request("/api/v1/admin/roles", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -267,7 +205,7 @@ describe("Admin API - Comprehensive Tests", () => {
                 description: "Test role description"
             };
 
-            const response = await fetch(`${baseUrl}/admin/roles`, {
+            const response = await app.request("/api/v1/admin/roles", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(roleData)
@@ -284,7 +222,7 @@ describe("Admin API - Comprehensive Tests", () => {
                 description: "Test role description"
             };
 
-            const response = await fetch(`${baseUrl}/admin/roles`, {
+            const response = await app.request("/api/v1/admin/roles", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -305,7 +243,7 @@ describe("Admin API - Comprehensive Tests", () => {
             };
 
             // Create first role
-            await fetch(`${baseUrl}/admin/roles`, {
+            await app.request("/api/v1/admin/roles", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -315,7 +253,7 @@ describe("Admin API - Comprehensive Tests", () => {
             });
 
             // Try to create duplicate
-            const response = await fetch(`${baseUrl}/admin/roles`, {
+            const response = await app.request("/api/v1/admin/roles", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -338,7 +276,7 @@ describe("Admin API - Comprehensive Tests", () => {
                 permissions: ["read", "write"]
             };
 
-            const response = await fetch(`${baseUrl}/admin/roles`, {
+            const response = await app.request("/api/v1/admin/roles", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -363,7 +301,7 @@ describe("Admin API - Comprehensive Tests", () => {
                 role: "admin"
             };
 
-            const response = await fetch(`${baseUrl}/admin/users/${regularUser.id}/roles`, {
+            const response = await app.request(`/api/v1/admin/users/${regularUser.id}/roles`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -384,7 +322,7 @@ describe("Admin API - Comprehensive Tests", () => {
                 role: "admin"
             };
 
-            const response = await fetch(`${baseUrl}/admin/users/${regularUser.id}/roles`, {
+            const response = await app.request(`/api/v1/admin/users/${regularUser.id}/roles`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(roleData)
@@ -401,7 +339,7 @@ describe("Admin API - Comprehensive Tests", () => {
                 role: "admin"
             };
 
-            const response = await fetch(`${baseUrl}/admin/users/${anotherUser.id}/roles`, {
+            const response = await app.request(`/api/v1/admin/users/${anotherUser.id}/roles`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -420,7 +358,7 @@ describe("Admin API - Comprehensive Tests", () => {
                 role: "admin"
             };
 
-            const response = await fetch(`${baseUrl}/admin/users/non-existent-id/roles`, {
+            const response = await app.request("/api/v1/admin/users/non-existent-id/roles", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -436,7 +374,7 @@ describe("Admin API - Comprehensive Tests", () => {
             const { token: adminToken } = await createAdminUser();
             const { user: regularUser } = await createRegularUser();
 
-            const response = await fetch(`${baseUrl}/admin/users/${regularUser.id}/roles`, {
+            const response = await app.request(`/api/v1/admin/users/${regularUser.id}/roles`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -457,12 +395,12 @@ describe("Admin API - Comprehensive Tests", () => {
 
             // Test multiple admin endpoints
             const endpoints = [
-                { method: "GET", url: `${baseUrl}/admin/users` },
-                { method: "GET", url: `${baseUrl}/admin/roles` }
+                { method: "GET", url: "/api/v1/admin/users" },
+                { method: "GET", url: "/api/v1/admin/roles" }
             ];
 
             for (const endpoint of endpoints) {
-                const response = await fetch(endpoint.url, {
+                const response = await app.request(endpoint.url, {
                     method: endpoint.method,
                     headers: { "Authorization": `Bearer ${token}` }
                 });
@@ -476,12 +414,12 @@ describe("Admin API - Comprehensive Tests", () => {
 
             // Test multiple admin endpoints
             const endpoints = [
-                { method: "GET", url: `${baseUrl}/admin/users` },
-                { method: "GET", url: `${baseUrl}/admin/roles` }
+                { method: "GET", url: "/api/v1/admin/users" },
+                { method: "GET", url: "/api/v1/admin/roles" }
             ];
 
             for (const endpoint of endpoints) {
-                const response = await fetch(endpoint.url, {
+                const response = await app.request(endpoint.url, {
                     method: endpoint.method,
                     headers: { "Authorization": `Bearer ${token}` }
                 });
@@ -492,12 +430,12 @@ describe("Admin API - Comprehensive Tests", () => {
 
         test("should reject all admin routes without authentication", async () => {
             const endpoints = [
-                { method: "GET", url: `${baseUrl}/admin/users` },
-                { method: "GET", url: `${baseUrl}/admin/roles` }
+                { method: "GET", url: "/api/v1/admin/users" },
+                { method: "GET", url: "/api/v1/admin/roles" }
             ];
 
             for (const endpoint of endpoints) {
-                const response = await fetch(endpoint.url, {
+                const response = await app.request(endpoint.url, {
                     method: endpoint.method
                 });
 

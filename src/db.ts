@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { DatabaseInitializer, Schema } from "open-bauth";
+import { DatabaseInitializer } from "open-bauth";
 import {
   JWTServiceBun,
   //@ts-ignore

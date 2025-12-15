@@ -8,10 +8,7 @@ import type { TableSchema } from "open-bauth";
 import {
     extendedUserSchema,
     extendedRolesSchema,
-    extendedUserRolesSchema,
-    userRoles,
-    newUserSchema,
-    Roles
+    extendedUserRolesSchema
 } from "../src/schemas/newSchemas";
 import { verificationTokenSchema } from "../src/database/schema/verification-token";
 // Set test environment
