@@ -29,10 +29,7 @@ user.get("/me", async (c) => {
     const auth = (c as any).auth;
     const userId = auth.user.id;
 
-    const user = await services.authService.findUserById(userId, {
-      includeRoles: true,
-      includePermissions: true
-    });
+    const user = await services.authService.findUserById(userId);
 
     if (!user) {
       return c.json({

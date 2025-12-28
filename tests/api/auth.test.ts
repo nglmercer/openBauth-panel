@@ -80,7 +80,7 @@ describe("Authentication API", () => {
     // 3. Find token in DB
     // Use raw query or controller if accessible, raw query is easier here
     // Param binding in bun:sqlite is ?, ?, ...
-    const tokenQuery = db.query("SELECT * FROM verification_tokens WHERE type = 'RESET_PASSWORD' AND user_id = $userId").get({ $userId: userId }) as any;
+    const tokenQuery = db.query("SELECT * FROM verification_tokens WHERE type = 'RESET_PASSWORD' AND user_id = ?").get(userId) as any;
     expect(tokenQuery).toBeDefined();
     expect(tokenQuery.token).toBeDefined();
 
