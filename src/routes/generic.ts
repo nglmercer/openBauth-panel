@@ -56,7 +56,7 @@ type QueryOptions = {
 const createSchema = z.object({
   data: dynamicDataSchema
 });
-
+//@ts-ignore
 const updateSchema = z.object({
   data: dynamicDataSchema
 });
@@ -524,10 +524,23 @@ genericData.put("/:tableName/:id", async (c) => {
     const controller = getController(tableName);
     const id = c.req.param("id");
     const body = await c.req.json();
-    const validated = updateSchema.parse(body);
 
-    const result = await controller.update(id, validated.data);
+    // Handle both formats: { data: {...} } or direct { field: value, ... }
+    let updateData: Record<string, unknown>;
+    if (body && typeof body === 'object' && 'data' in body && body.data !== null) {
+      // Format: { data: {...} }
+      updateData = dynamicDataSchema.parse(body.data);
+    } else if (body && typeof body === 'object') {
+      // Format: { field: value, ... }
+      updateData = dynamicDataSchema.parse(body);
+    } else {
+      return c.json({
+        success: false,
+        error: "Invalid request data: expected object with fields"
+      }, 400);
+    }
 
+    const result = await controller.update(id, updateData);
     if (!result.success) {
       return c.json({
         success: false,
