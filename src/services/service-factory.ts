@@ -1,13 +1,12 @@
 import {
   DatabaseInitializer,
   JWTServiceBun,
-  AuthService,
   PermissionService,
   OAuthService,
   SecurityService,
   EnhancedUserService
 } from 'open-bauth';
-import { dbInitializer, jwtService, authService, permissionService } from '../db';
+import { dbInitializer, jwtService, permissionService } from '../db';
 import { NotificationService } from './notification';
 import { AuditService } from './audit';
 import { RateLimitService } from './rate-limit';

@@ -1,5 +1,5 @@
 import { AuthService, DatabaseInitializer, JWTServiceBun, type User } from 'open-bauth';
-import {type UserType,type UpdateUserType,type userRolesType,type RolesType } from '@/db';
+import {type UserType, type UpdateUserType } from '@/db';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 

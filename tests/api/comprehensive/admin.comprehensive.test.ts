@@ -4,7 +4,6 @@ import { initializeApp, app } from "../../../src/index";
 import { getServiceFactory } from "../../../src/services/service-factory";
 
 describe("Admin API - Comprehensive Tests", () => {
-    let baseUrl: string;
     let server: any;
     let services: any;
 
@@ -17,7 +16,6 @@ describe("Admin API - Comprehensive Tests", () => {
             port: 0,
             fetch: app.fetch
         });
-        baseUrl = `http://localhost:${server.port}/api/v1`;
         
         // Get services
         const factory = getServiceFactory();

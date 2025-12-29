@@ -2,14 +2,12 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { getServiceFactory } from "../../../src/services/service-factory";
 import { createDb, testUtils } from "../../setup";
 import { createAuthMiddlewareForHono } from "../../../src/middleware";
-import type { Context } from "hono";
 
 describe("Auth Middleware - Roles Integration", () => {
     let dbInit: any;
     let factory: any;
     let services: any;
     let adminToken: string;
-    let normalUserToken: string;
     let adminUserId: string;
     let normalUserId: string;
 
@@ -74,7 +72,7 @@ describe("Auth Middleware - Roles Integration", () => {
         expect(normalUserFullResult.success).toBe(true);
         
         adminToken = await services.jwtService.generateToken(adminUserFullResult.data);
-        normalUserToken = await services.jwtService.generateToken(normalUserFullResult.data);
+        // normalUserToken is not used in tests, so we don't generate it
 
         console.log("Setup complete - Admin user ID:", adminUserId, "Normal user ID:", normalUserId);
     });

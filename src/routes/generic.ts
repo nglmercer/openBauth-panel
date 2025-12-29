@@ -21,16 +21,48 @@ const querySchema = z.object({
   fields: z.string().optional()
 });
 
+// Schema for dynamic data (create/update/bulk operations)
+// Using z.record to allow any key-value pairs while still providing structure
+const dynamicDataSchema = z.record(
+  z.string(),
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.date(),
+    z.unknown(),
+    z.array(z.unknown())
+  ])
+);
+
+// Schema for search parameters - use z.record for dynamic keys
+type SearchParams = {
+  search?: string;
+  [key: string]: string | number | boolean | null | undefined | Record<string, unknown> | unknown[];
+};
+
+// Schema for query options (pagination, sorting, etc.)
+type QueryOptions = {
+  limit?: number;
+  offset?: number;
+  page?: number;
+  orderBy?: string;
+  order?: "asc" | "desc";
+  where?: Record<string, unknown>;
+  fields?: string;
+};
+
 const createSchema = z.object({
-  data: z.any()
+  data: dynamicDataSchema
 });
 
 const updateSchema = z.object({
-  data: z.any()
+  data: dynamicDataSchema
 });
 
 const bulkSchema = z.object({
-  records: z.array(z.any())
+  records: z.array(dynamicDataSchema)
 });
 
 // Store controllers in a Map for reuse
@@ -191,11 +223,11 @@ genericData.get("/:tableName/count", async (c) => {
     const query = c.req.query();
 
     // Build filter from query parameters
-    const filters: Record<string, any> = {};
+    const filters: Record<string, unknown> = {};
     Object.entries(query).forEach(([key, value]) => {
       if (value) {
         try {
-          filters[key] = JSON.parse(value as string);
+          filters[key] = JSON.parse(value);
         } catch {
           filters[key] = value;
         }
@@ -228,25 +260,25 @@ genericData.get("/:tableName/search", async (c) => {
     const controller = getController(tableName);
     const query = c.req.query();
 
-    // Parse search parameters
-    const searchParams: any = {};
-    const options: any = {};
+    // Parse search parameters using typed interfaces
+    const searchParams: SearchParams = {};
+    const options: QueryOptions = {};
 
     Object.entries(query).forEach(([key, value]) => {
       if (key === 'q' || key === 'query') {
         searchParams.search = value;
       } else if (key === 'limit') {
-        options.limit = Math.min(parseInt(value as string) || 20, 100);
+        options.limit = Math.min(parseInt(value) || 20, 100);
       } else if (key === 'offset') {
-        options.offset = parseInt(value as string) || 0;
+        options.offset = parseInt(value) || 0;
       } else if (key === 'sort') {
         options.orderBy = value;
       } else if (key === 'order') {
-        options.order = value;
+        options.order = value === 'asc' || value === 'desc' ? value : 'asc';
       } else if (value) {
         // Add to search filters
         try {
-          searchParams[key] = JSON.parse(value as string);
+          searchParams[key] = JSON.parse(value);
         } catch {
           searchParams[key] = value;
         }
@@ -285,12 +317,12 @@ genericData.get("/:tableName", async (c) => {
     const validated = querySchema.parse(query);
 
     // Build filter from query parameters (excluding pagination params)
-    const filters: Record<string, any> = {};
+    const filters: Record<string, unknown> = {};
     Object.entries(query).forEach(([key, value]) => {
       if (!['page', 'limit', 'sort', 'order', 'fields'].includes(key) && value) {
         // Try to parse as JSON for complex filters
         try {
-          filters[key] = JSON.parse(value as string);
+          filters[key] = JSON.parse(value);
         } catch {
           filters[key] = value;
         }
@@ -303,7 +335,12 @@ genericData.get("/:tableName", async (c) => {
     const offset = (page - 1) * limit;
 
     // Build options with direct SQL query if field selection is requested
-    let result: any;
+    type QueryResult = {
+      data: Record<string, unknown>[];
+      total: number;
+    };
+
+    let result: QueryResult;
 
     if (validated.fields || validated.sort) {
       // Use raw SQL for field selection or sorting
@@ -311,12 +348,12 @@ genericData.get("/:tableName", async (c) => {
         ? validated.fields.split(',').map(f => f.trim()).join(', ')
         : '*';
       let sql = `SELECT ${selectedFields} FROM ${tableName}`;
-      const params: any[] = [];
+      const params: (string | number)[] = [];
 
       // Add WHERE clause if filters exist
       if (Object.keys(filters).length > 0) {
         const whereClauses = Object.entries(filters).map(([key, value]) => {
-          params.push(value);
+          params.push(value as string | number);
           return `${key} = ?`;
         });
         sql += ` WHERE ${whereClauses.join(' AND ')}`;
@@ -337,19 +374,22 @@ genericData.get("/:tableName", async (c) => {
         const whereClauses = Object.entries(filters).map(([key]) => `${key} = ?`);
         countSql += ` WHERE ${whereClauses.join(' AND ')}`;
       }
-      const countResult = db.query(countSql).all(...Object.values(filters)) as any[];
+      const countResult = db.query(countSql).all(...Object.values(filters).map(v => v as string | number)) as { count: number }[];
       const total = countResult[0]?.count || 0;
 
       // Execute main query
       const data = db.query(sql).all(...params);
-      result = { data, total };
+      result = { data: data as Record<string, unknown>[], total };
     } else {
       // Use controller's findAll method for standard queries
-      const options: any = {
+      const options: QueryOptions = {
         limit,
-        offset,
-        where: Object.keys(filters).length > 0 ? filters : undefined
+        offset
       };
+      
+      if (Object.keys(filters).length > 0) {
+        options.where = filters;
+      }
 
       // Sorting - combine orderBy and order into SQL clause
       if (validated.sort) {
@@ -359,8 +399,8 @@ genericData.get("/:tableName", async (c) => {
       // DEBUG: Log options
       defaultLogger.info(`[GENERIC] findAll options:`, options);
 
-      // Execute query
-      result = await controller.findAll(options);
+      // Execute query - cast options to proper type
+      result = await controller.findAll(options as any) as QueryResult;
 
       // DEBUG: Log result
       defaultLogger.info(`[GENERIC] findAll result:`, { dataLength: result.data?.length, firstItem: result.data?.[0] });
@@ -387,7 +427,7 @@ genericData.get("/:tableName", async (c) => {
       return c.json({
         success: false,
         error: "Invalid query parameters",
-        details: (error as any).errors
+        details: error.issues
       }, 400);
     }
 
@@ -465,7 +505,7 @@ genericData.post("/:tableName", async (c) => {
       return c.json({
         success: false,
         error: "Invalid request data",
-        details: (error as any).errors
+        details: error.issues
       }, 400);
     }
 
@@ -514,7 +554,7 @@ genericData.put("/:tableName/:id", async (c) => {
       return c.json({
         success: false,
         error: "Invalid request data",
-        details: (error as any).errors
+        details: error.issues
       }, 400);
     }
 
@@ -588,8 +628,14 @@ genericData.post("/:tableName/bulk", async (c) => {
       validated.records.map(record => controller.create(record))
     );
 
-    const successful = results.filter((r: any) => r.success);
-    const failed = results.filter((r: any) => !r.success);
+    type ControllerResult = {
+      success: boolean;
+      error?: string;
+      data?: Record<string, unknown>;
+    };
+
+    const successful = results.filter((r: ControllerResult) => r.success);
+    const failed = results.filter((r: ControllerResult) => !r.success);
 
     // Log bulk operation for audit
     const auth = c.get('auth');
@@ -606,7 +652,7 @@ genericData.post("/:tableName/bulk", async (c) => {
         total: validated.records.length,
         successful: successful.length,
         failed: failed.length,
-        errors: failed.map((r: any, i: number) => ({ index: i, error: r.error }))
+        errors: failed.map((r: ControllerResult, i: number) => ({ index: i, error: r.error }))
       }
     });
 
@@ -615,7 +661,7 @@ genericData.post("/:tableName/bulk", async (c) => {
       return c.json({
         success: false,
         error: "Invalid request data",
-        details: (error as any).errors
+        details: error.issues
       }, 400);
     }
 
