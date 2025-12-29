@@ -14,6 +14,7 @@ import {
   getValidatedData
 } from "../schemas";
 import { db } from "@/db";
+import { z } from "zod";
 import type { TokenType } from "@/database/schema/verification-token";
 export const user = new Hono();
 const factory = getServiceFactory();
@@ -521,5 +522,52 @@ user.post("/password", createValidationMiddleware(updatePasswordSchema), async (
     }, 500);
   }
 });
-
+/*
+// temporal api to update role to admin
+admin.post("/update-role-to-admin", async (c) => {
+    try {
+        const body = await c.req.json();
+        const { userId } = assignRoleSchema.parse(body);
+        
+        // Simple role assignment - in production you'd want more validation
+        const userController = services.dbInitializer.createController("users");
+        await userController.update(userId, { role: "admin" });
+        
+        return c.json({ success: true, message: "Role updated to admin" });
+    } catch (error) {
+        defaultLogger.error("Update role error", error as Error);
+        return c.json({ success: false, error: "Internal server error" }, 500);
+    }
+});
+*/
+const assignRoleSchema = z.object({
+    userId: z.string(),
+    role: z.string()
+});
+user.post("/update-role-to-admin", async (c) => {
+    try {
+        const body = await c.req.json();
+        const { userId } = assignRoleSchema.parse(body);
+        
+        // Simple role assignment - in production you'd want more validation
+        const userController = services.permissionService;
+        if (!userId) {
+            return c.json({ success: false, error: "User ID is required" }, 400);
+        }
+        const roles = await services.permissionService.getAllRoles();
+        const adminRole = roles.find(role => role.name === "admin");
+        if (!adminRole) {
+            return c.json({ success: false, error: "Admin role not found" }, 404);
+        }
+        const result = await userController.assignRoleToUser(userId, adminRole.id);
+        console.log("Role assignment result:", result);
+        if (!result.success) {
+            return c.json({ success: false, error: result.error || "Failed to assign role" }, 400);
+        }
+        return c.json({ success: true, message: "Role updated to admin", result });
+    } catch (error) {
+        defaultLogger.error("Update role error", error as Error);
+        return c.json({ success: false, error: "Internal server error" }, 500);
+    }
+});
 export { user as userRoutes };
